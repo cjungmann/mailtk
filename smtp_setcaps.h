@@ -31,7 +31,7 @@ typedef struct _smtp_caps
 typedef void (*scap_setter)(SMTPCaps *caps, const char *line, int line_len);
 
 
-void parse_ehlo_response(SMTPCaps *caps, const char *buffer, int buff_len);
+void parse_ehlo_response(SMTPCaps *caps, const char *buffer, int data_len);
 void show_smtpcaps(const SMTPCaps *caps);
 
 typedef struct _cap_match

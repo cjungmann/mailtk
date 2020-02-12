@@ -198,9 +198,9 @@ int find_capname_index(CSResult *csr, const char *text)
    return 0;
 }
 
-void parse_ehlo_response(SMTPCaps *caps, const char *buffer, int buff_len)
+void parse_ehlo_response(SMTPCaps *caps, const char *buffer, int data_len)
 {
-   const char *end = &buffer[buff_len];
+   const char *end = &buffer[data_len];
    const char *ptr = buffer;
    const char *end_of_line;
 
