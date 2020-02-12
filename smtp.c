@@ -80,10 +80,6 @@ int greet_smtp_server(SMTPCaps *scaps, const ServerCreds *sc, STalker *talker)
    {
       parse_ehlo_response(scaps, buffer, bytes_read);
 
-      // Terminate the connection
-      stk_send_line(talker, "QUIT", NULL);
-      stk_recv_line(talker, buffer, sizeof(buffer));
-
       return 1;
    }
 
@@ -125,7 +121,7 @@ int greet_smtp_server(SMTPCaps *scaps, const ServerCreds *sc, STalker *talker)
 #include "smtp_setcaps.c"
 
 
-void use_the_talker(STalker *stalker, void *data)
+void use_the_smtp_talker(STalker *stalker, void *data)
 {
    ServerCreds *sc = (ServerCreds*)data;
    SMTPCaps scaps;
@@ -141,6 +137,9 @@ void use_the_talker(STalker *stalker, void *data)
    else
       printf("There was a problem with greet_smtp_server().\n");
 
+   // Terminate the connection
+   stk_send_line(talker, "QUIT", NULL);
+   stk_recv_line(talker, buffer, sizeof(buffer));
 }
 
 int main(int argc, const char **argv)
@@ -148,7 +147,7 @@ int main(int argc, const char **argv)
    ServerCreds sc;
    init_server_creds(&sc);
 
-   int exit_code = open_socket_talker(sc.host_url, sc.host_port, use_the_talker, &sc);
+   int exit_code = open_socket_talker(sc.host_url, sc.host_port, use_the_smtp_talker, &sc);
    if (exit_code)
    {
       fprintf(stderr,
