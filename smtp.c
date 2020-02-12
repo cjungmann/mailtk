@@ -6,32 +6,6 @@
 #include "smtp.h"
 #include "smtp_setcaps.h"
 
-/**
- * sample_creds.c is not part of the project: it holds
- * sensitive data that permits using an SMTP account.
- * If you choose to use it, you will have to provide the
- * appropriate values.
- *
- * sample_creds.c should contain a function that prepares
- * a ServerCreds object.  Alternatively, the call to
- * init_server_creds() could be replaced with code that
- * sets the ServerCreds object by another means.
- *
- * void init_server_creds(ServerCreds *sc)
- * {
- *    memset(sc, 0, sizeof(ServerCreds));
- *    sc->host_url = "smtp.gmail.com";
- *    sc->host_port = 587;
- *    sc->account = "bogus@gmail.com";
- *
- *    sc->login = sc->account;
- *    sc->password = "bogus_password";
- * }
- * 
- */
-
-#include "sample_creds.c"
-
 int read_complete_ehlo_response(STalker *talker, char *buffer, int buff_len)
 {
    char *ptr = buffer;
@@ -105,40 +79,68 @@ int greet_smtp_server(SMTPCaps *scaps, const ServerCreds *sc, STalker *talker)
    if (bytes_read)
    {
       parse_ehlo_response(scaps, buffer, bytes_read);
+
+      // Terminate the connection
+      stk_send_line(talker, "QUIT", NULL);
+      stk_recv_line(talker, buffer, sizeof(buffer));
+
       return 1;
    }
 
    return 0;
 }
-   
 
 
 #ifdef SMTP_MAIN
 
-#include <stdio.h>
-#include <assert.h>
-#include "socket.h"
+/**
+ * sample_creds.c is not part of the project: it holds
+ * sensitive data that permits using an SMTP account.
+ * If you choose to use it, you will have to provide the
+ * appropriate values.
+ *
+ * sample_creds.c should contain a function that prepares
+ * a ServerCreds object.  Alternatively, the call to
+ * init_server_creds() could be replaced with code that
+ * sets the ServerCreds object by another means.
+ *
+ * void init_server_creds(ServerCreds *sc)
+ * {
+ *    memset(sc, 0, sizeof(ServerCreds));
+ *    sc->host_url = "smtp.gmail.com";
+ *    sc->host_port = 587;
+ *    sc->account = "bogus@gmail.com";
+ *
+ *    sc->login = sc->account;
+ *    sc->password = "bogus_password";
+ * }
+ * 
+ */
 
-// Include source files for local compile
-#include "socket.c"
+#include "sample_creds.c"
+
+// Include source files for one-off compile
 #include "socktalk.c"
+#include "socket.c"
 #include "smtp_setcaps.c"
 
-void use_the_talker(STalker *talker, void *data)
+
+void use_the_talker(STalker *stalker, void *data)
 {
-   assert(data);
-
    ServerCreds *sc = (ServerCreds*)data;
-   char buffer[1024];
-
    SMTPCaps scaps;
-   memset(&scaps, 0, sizeof(scaps));
 
-   if (greet_smtp_server(&scaps, sc, talker))
+   printf("We have a talker to use for account %s.  Yay!\n", sc->account);
+   
+   printf("We are about to call greet_smtp_server().\n");
+   if (greet_smtp_server(&scaps, sc, stalker))
+   {
+      printf("Successfully ran greet_smtp_server.  What's the result?\n");
       show_smtpcaps(&scaps);
+   }
+   else
+      printf("There was a problem with greet_smtp_server().\n");
 
-   stk_send_line(talker, "QUIT", NULL);
-   stk_recv_line(talker, buffer, sizeof(buffer));
 }
 
 int main(int argc, const char **argv)
