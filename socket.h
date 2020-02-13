@@ -11,6 +11,7 @@ typedef struct _socket_handle
 } SockHandle;
 
 int open_socket_talker(const char *host_url, int host_port, talker_user tuser, void *data);
+void open_ssl_talker(STalker *open_talker, talker_user tuser, void *data);
 
 #endif
 

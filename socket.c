@@ -7,9 +7,11 @@
 #include <arpa/inet.h>   // Functions that convert addrinfo member values.
 #include <unistd.h>      // for close() function
 
+#include <assert.h>
+
 #include "socktalk.h"
 #include "socket.h"
-
+#include "logging.h"
 
 int digits_in_base(int value, int base)
 {
@@ -45,6 +47,59 @@ int itoa_buff(int value, int base, char *buffer, int buffer_len)
       return 0;
 }
 
+
+/**
+ * @brief Creates a readable message from SSL_get_error() for logging an error.
+ */
+void log_ssl_error(const SSL *ssl, int return_value)
+{
+   int error = SSL_get_error(ssl, return_value);
+   const char *msg = NULL;
+   switch(error)
+   {
+      case SSL_ERROR_NONE:
+         msg = "SSL_ERROR_NONE";
+         break;
+
+      case SSL_ERROR_ZERO_RETURN:
+         msg = "SSL_ERROR_ZERO_RETURN";
+         break;
+      case SSL_ERROR_WANT_READ:
+         msg = "SSL_ERROR_WANT_READ";
+         break;
+      case SSL_ERROR_WANT_WRITE:
+         msg = "SSL_ERROR_WANT_WRITE";
+         break;
+      case SSL_ERROR_WANT_CONNECT:
+         msg = "SSL_ERROR_WANT_CONNECT";
+         break;
+      case SSL_ERROR_WANT_ACCEPT:
+         msg = "SSL_ERROR_WANT_ACCEPT";
+         break;
+      case SSL_ERROR_WANT_X509_LOOKUP:
+         msg = "SSL_ERROR_WANT_X509_LOOKUP";
+         break;
+      case SSL_ERROR_SYSCALL:
+         msg = "SSL_ERROR_SYSCALL";
+         break;
+      case SSL_ERROR_SSL:
+         msg = "SSL_ERROR_SSL";
+         break;
+      default:
+         msg = NULL;
+   }
+
+   if (msg)
+      log_error_message(1, "SSL failure: ", msg, NULL);
+   else
+   {
+      int dlen = digits_in_base(error, 10);
+      char *buffer = (char*)alloca(dlen);
+      itoa_buff(error, 10, buffer, dlen);
+
+      log_error_message(1, "Unrecognized SSL_get_error() response, \"", msg, "\"",  NULL);
+   }
+}
 
 int open_socket_talker(const char *host_url, int host_port, talker_user tuser, void *data)
 {
@@ -118,6 +173,81 @@ int open_socket_talker(const char *host_url, int host_port, talker_user tuser, v
    return exit_value;
 }
 
+/**
+ * This function assumes that open_talker is a regular socket talker
+ * because it will use the socket member to open SSL.
+ */
+void open_ssl_talker(STalker *open_talker, talker_user tuser, void *data)
+{
+   const SSL_METHOD *method;
+   SSL_CTX *context;
+   SSL *ssl;
+   int connect_outcome;
+
+   assert(open_talker->socket_handle);
+
+   OpenSSL_add_all_algorithms();
+   /* err_load_bio_strings(); */
+   ERR_load_crypto_strings();
+   SSL_load_error_strings();
+
+   /* openssl_config(null); */
+   SSL_library_init();
+
+   method = SSLv23_client_method();
+   if (method)
+   {
+      context = SSL_CTX_new(method);
+
+      if (context)
+      {
+         // following two not included in most recent example code i found.
+         // it may be appropriate to uncomment these lines as i learn more.
+         // ssl_ctx_set_verify(context, ssl_verify_peer, null);
+         // ssl_ctx_set_verify_depth(context, 4);
+
+         // we could set some flags, but i'm not doing it until i need to and i understand 'em
+         // const long ctx_flags = ssl_op_no_sslv2 | ssl_op_no_sslv3 | ssl_op_no_compression;
+         // ssl_ctx_set_options(context, ctx_flags);
+         SSL_CTX_set_options(context, SSL_OP_NO_SSLv2);
+
+         ssl = SSL_new(context);
+         if (ssl)
+         {
+            SSL_set_fd(ssl, open_talker->socket_handle);
+
+            connect_outcome = SSL_connect(ssl);
+
+            if (connect_outcome == 1)
+            {
+               STalker ssl_talker;
+               init_ssl_talker(&ssl_talker, ssl);
+
+               (*tuser)(&ssl_talker, data);
+            }
+            else if (connect_outcome == 0)
+            {
+               // failed with controlled shutdown
+               log_ssl_error(ssl, connect_outcome);
+            }
+            else
+            {
+               log_ssl_error(ssl, connect_outcome);
+            }
+
+            SSL_free(ssl);
+         }
+         else
+            log_error_message(1, "Failed to create a new SSL instance.", NULL);
+
+         SSL_CTX_free(context);
+      }
+      else
+         log_error_message(1, "Failed to initiate an SSL context.", NULL);
+   }
+   else
+      log_error_message(1, "Failed to find SSL client method.", NULL);
+}
 
 /**
  * @brief Open a socket to the given host on the specified port.
@@ -362,6 +492,7 @@ int open_socket_talker(const char *host_url, int host_port, talker_user tuser, v
 #ifdef SOCKET_MAIN
 
 #include "socktalk.c"
+#include "logging.c"
 
 void use_the_talker(STalker *talker, void *data)
 {
