@@ -15,6 +15,15 @@ typedef struct _server_credentials
    const char *password;
 } ServerCreds;
 
+typedef enum _smtp_error_codes
+{
+   SMTP_SUCCESS = 0,
+   SMTP_ERROR_NO_RESPONSE,
+   SMTP_ERROR_AUTH_REFUSED,
+   SMTP_ERROR_AUTH_LOGIN_REFUSED,
+   SMTP_ERROR_AUTH_WRONG_PASSWORD
+} SMTPError;
+
 
 void init_server_creds(ServerCreds *sc);
 
