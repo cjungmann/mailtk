@@ -1,12 +1,15 @@
 // -*- compile-command: "base=smtp_setcaps; gcc -Wall -Werror -ggdb -DSMTP_SETCAPS_MAIN -U NDEBUG -o $base ${base}.c" -*-
 
-#include "smtp_setcaps.h"
 #include <stddef.h>    // for NULL value
 #include <stdio.h>     // for printf() in show_smtp_caps()
 #include <stdlib.h>    // for atoi()
 #include <string.h>    // for strncmp()
 #include <ctype.h>     // for isdigit()
 
+#include <assert.h>
+
+#include "smtp_setcaps.h"
+#include "logging.h"
 
 void cset_starttls(SMTPCaps *caps,
                    const char *line,
@@ -47,6 +50,11 @@ void cset_auth_plain(SMTPCaps *caps,
                      const char *line,
                      int line_len)                 { caps->cap_auth_plain = 1; }
 int cget_auth_plain(const SMTPCaps *caps)          { return caps->cap_auth_plain == 1; }
+
+void cset_auth_plain_clienttoken(SMTPCaps *caps,
+                                 const char *line,
+                                 int line_len)     { caps->cap_auth_plain_clienttoken = 1; }
+int cget_auth_plain_clienttoken(SMTPCaps *caps)    { return caps->cap_auth_plain_clienttoken == 1; }
 
 void cset_auth_login(SMTPCaps *caps,
                      const char *line,
@@ -94,16 +102,17 @@ void cset_auth_xoauth2(SMTPCaps *caps,
 int cget_auth_xoauth2(const SMTPCaps *caps)        { return caps->cap_auth_xoauth2 == 1; }
 
 const CapMatch authstrings[] = {
-   {"PLAIN",        5, cset_auth_plain},
-   {"LOGIN",        5, cset_auth_login},
-   {"GSSAPI",       6, cset_auth_gssapi},
-   {"DIGEST-MD5",  10, cset_auth_digest_md5},
-   {"MD5",          3, cset_auth_md5},
-   {"CRAM-MD5",     8, cset_auth_cram_md5},
-   {"OAUTH10A",     8, cset_auth_oauth10a},
-   {"OAUTHBEARER", 11, cset_auth_oauthbearer},
-   {"XOAUTH",       6, cset_auth_xoauth},
-   {"XOAUTH2",      7, cset_auth_xoauth2}
+   {"LOGIN",              5, cset_auth_login},
+   {"PLAIN",              5, cset_auth_plain},
+   {"PLAIN-CLIENTTOKEN", 17, cset_auth_plain_clienttoken},
+   {"GSSAPI",             6, cset_auth_gssapi},
+   {"DIGEST-MD5",        10, cset_auth_digest_md5},
+   {"MD5",                3, cset_auth_md5},
+   {"CRAM-MD5",           8, cset_auth_cram_md5},
+   {"OAUTH10A",           8, cset_auth_oauth10a},
+   {"OAUTHBEARER",       11, cset_auth_oauthbearer},
+   {"XOAUTH",             6, cset_auth_xoauth},
+   {"XOAUTH2",            7, cset_auth_xoauth2}
 };
 
 int authstrings_count = sizeof(authstrings) / sizeof(CapMatch);
@@ -121,8 +130,9 @@ const char *CapNames[] = {
    "smtputf8",
    "size",
    "auth_any",
-   "auth_plain",
    "auth_login",
+   "auth_plain",
+   "auth_plain_clienttoken",
    "auth_gssapi",
    "auth_digest_md5",
    "auth_md5",
@@ -130,7 +140,7 @@ const char *CapNames[] = {
    "auth_oauth10a",
    "auth_oauthbearer",
    "auth_xoauth",
-   "auth_xoauth2xs",
+   "auth_xoauth2",
    NULL
 };
 
@@ -150,14 +160,14 @@ const char *find_end_of_line(const char *line)
    return NULL;
 }
 
-const CapMatch* find_capstring_element(const char *text)
+const CapMatch* find_capstring_element(const char *text, int text_len)
 {
    const CapMatch *ptr = authstrings;
    const CapMatch *end = authstrings + authstrings_count;
 
    while (ptr < end)
    {
-      if (strncmp(text, ptr->str, ptr->len) == 0)
+      if (ptr->len == text_len && 0 == strncasecmp(text, ptr->str, text_len))
          return ptr;
 
       ++ptr;
@@ -198,11 +208,67 @@ int find_capname_index(CSResult *csr, const char *text)
    return 0;
 }
 
+/**
+ * Skip forward to next space within range.
+ *
+ * Return *end* to terminating calling while() loop if no spaces found.
+ */
+const char *parse_next_space(const char *line, const char *end)
+{
+   while (line < end)
+   {
+      if (*line == ' ')
+         return line;
+      else
+         ++line;
+   }
+
+   return end;
+}
+
+void parse_ehlo_auth(SMTPCaps *caps, const char *auth_line, int line_len)
+{
+   assert(strncasecmp(auth_line, "AUTH", 4)==0);
+
+   // Skip the 'AUTH ' substring to find the first option:
+   const char *ptr = auth_line + 5;
+
+   const char *end = auth_line + line_len;
+   const char *next_space;
+   char *missing_buffer = NULL;
+   int auth_name_len;
+
+   const CapMatch *capmatch_ptr;
+
+   while (ptr < end)
+   {
+      next_space = parse_next_space(ptr, end);
+      auth_name_len = next_space - ptr;
+
+      capmatch_ptr = find_capstring_element(ptr, auth_name_len);
+      if (capmatch_ptr)
+         (*capmatch_ptr->set_cap)(caps, ptr, auth_name_len);
+      else
+      {
+         if (!missing_buffer)
+            missing_buffer = (char*)alloca(line_len);
+
+         strncpy(missing_buffer, ptr, auth_name_len);
+         missing_buffer[auth_name_len] = '\0';
+
+         log_error_message(0, "Failed to match authorization type '", missing_buffer, "'", NULL);
+      }
+
+      ptr = next_space + 1;
+   }
+}
+
 void parse_ehlo_response(SMTPCaps *caps, const char *buffer, int data_len)
 {
    const char *end = &buffer[data_len];
    const char *ptr = buffer;
    const char *end_of_line;
+   int line_len;
 
    int line_status;
    CSResult csr;
@@ -217,7 +283,11 @@ void parse_ehlo_response(SMTPCaps *caps, const char *buffer, int data_len)
          // Shift to text following status number:
          ptr += 4;
 
-         if (find_capname_index(&csr, ptr))
+         line_len = end_of_line - ptr;
+
+         if (strncasecmp("auth", ptr, 4) == 0)
+            parse_ehlo_auth(caps, ptr, line_len);
+         else if (find_capname_index(&csr, ptr))
          {
             int *ptr_cap_field = (int*)caps;
             ptr_cap_field += csr.index;
@@ -226,13 +296,6 @@ void parse_ehlo_response(SMTPCaps *caps, const char *buffer, int data_len)
                *ptr_cap_field = atoi(csr.ptr_to_value);
             else
                *ptr_cap_field = 1;
-         }
-
-         const CapMatch *el = find_capstring_element(ptr);
-         if (el)
-         {
-            ptr += el->len;
-            el->set_cap(caps, ptr, end_of_line - ptr);
          }
       }
       else if (line_status >= 400)
@@ -273,9 +336,22 @@ void show_smtpcaps(const SMTPCaps *caps)
 
 
 #include <stdio.h>
+#include "logging.c"
+
+void test_parse_ehlo_auth(void)
+{
+   const char *tstring = "AUTH LOGIN PLAIN XOAUTH2 PLAIN-CLIENTTOKEN OAUTHBEARER XOAUTH";
+
+   SMTPCaps caps;
+   memset(&caps, 0, sizeof(SMTPCaps));
+
+   parse_ehlo_auth(&caps, tstring, strlen(tstring));
+   show_smtpcaps(&caps);
+}
 
 int main(int argc, const char **argv)
 {
+   test_parse_ehlo_auth();
    return 0;
 }
 
