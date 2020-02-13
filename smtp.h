@@ -3,6 +3,7 @@
 
 #include "smtp_setcaps.h"
 #include "socktalk.h"
+#include "socket.h"
 
 typedef struct _server_credentials
 {
@@ -16,6 +17,8 @@ typedef struct _server_credentials
 
 
 void init_server_creds(ServerCreds *sc);
+
+int start_tls(ServerCreds *sc, STalker *open_talker, talker_user tuser);
 
 int greet_smtp_server(SMTPCaps *scaps, const ServerCreds *sc, STalker *talker);
 

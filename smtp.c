@@ -1,4 +1,4 @@
-// -*- compile-command: "base=smtp; gcc -Wall -Werror -ggdb -DSMTP_MAIN -U NDEBUG -o $base ${base}.c -lssl" -*-
+// -*- compile-command: "base=smtp; gcc -Wall -Werror -ggdb -DSMTP_MAIN -U NDEBUG -o $base ${base}.c -lssl -lcrypto" -*-
 
 #include <string.h>
 #include <ctype.h>  // for isspace()
@@ -67,6 +67,29 @@ int read_complete_ehlo_response(STalker *talker, char *buffer, int buff_len)
    return end_of_data - buffer;
 }
 
+int start_tls(ServerCreds *sc, STalker *open_talker, talker_user tuser)
+{
+   char buffer[1024];
+   int bytes_read;
+   int reqresponse;
+   stk_send_line(open_talker, "STARTTLS", NULL);
+
+   /* bytes_read = read_complete_ehlo_response(talker, buffer, sizeof(buffer)); */
+   bytes_read = stk_recv_line(open_talker, buffer, sizeof(buffer));
+   if (bytes_read > 3)
+   {
+      reqresponse = atoi(buffer);
+      printf("STARTTLS start response is %d.\n", reqresponse);
+      printf("The contents of the response are:\n[32;1m%s[m\n", buffer);
+
+      open_ssl_talker(open_talker, tuser, sc);
+
+      return 1;
+   }
+
+   return 0;
+}
+
 int greet_smtp_server(SMTPCaps *scaps, const ServerCreds *sc, STalker *talker)
 {
    char buffer[1024];
@@ -119,6 +142,17 @@ int greet_smtp_server(SMTPCaps *scaps, const ServerCreds *sc, STalker *talker)
 #include "socktalk.c"
 #include "socket.c"
 #include "smtp_setcaps.c"
+#include "logging.c"
+
+void use_the_smtp_tls_talker(STalker *stalker, void *data)
+{
+   SMTPCaps scaps;
+   ServerCreds *sc = (ServerCreds*)data;
+   if (greet_smtp_server(&scaps, sc, stalker))
+   {
+      show_smtpcaps(&scaps);
+   }
+}
 
 
 void use_the_smtp_talker(STalker *stalker, void *data)
@@ -126,20 +160,20 @@ void use_the_smtp_talker(STalker *stalker, void *data)
    ServerCreds *sc = (ServerCreds*)data;
    SMTPCaps scaps;
 
-   printf("We have a talker to use for account %s.  Yay!\n", sc->account);
    
-   printf("We are about to call greet_smtp_server().\n");
    if (greet_smtp_server(&scaps, sc, stalker))
    {
-      printf("Successfully ran greet_smtp_server.  What's the result?\n");
       show_smtpcaps(&scaps);
+      printf("About to start_tls.\n");
+      start_tls(sc, stalker, use_the_smtp_tls_talker);
    }
    else
       printf("There was a problem with greet_smtp_server().\n");
 
    // Terminate the connection
-   stk_send_line(talker, "QUIT", NULL);
-   stk_recv_line(talker, buffer, sizeof(buffer));
+   char buffer[1024];
+   stk_send_line(stalker, "QUIT", NULL);
+   stk_recv_line(stalker, buffer, sizeof(buffer));
 }
 
 int main(int argc, const char **argv)
