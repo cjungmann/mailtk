@@ -5,6 +5,20 @@
 #include "sample_creds.c"
 
 
+void tls_user(STalker *stalker, void *data)
+{
+   ServerCreds *sc = (ServerCreds*)data;
+   SMTPCaps scaps;
+
+   if (greet_smtp_server(&scaps, sc, stalker))
+   {
+      printf("Established a TLS SMTP connection.\nThese are the available SMTP Caps:\n");
+      show_smtpcaps(&scaps);
+   }
+   else
+      printf("Failed to access SMTP server capabilities.\n");
+}
+
 void socket_user(STalker *stalker, void *data)
 {
    ServerCreds *sc = (ServerCreds*)data;
@@ -12,8 +26,13 @@ void socket_user(STalker *stalker, void *data)
 
    if (greet_smtp_server(&scaps, sc, stalker))
    {
-      if (scaps.
-      printf("Insecure connection with SMTP server.\n");
+      if (scaps.cap_starttls)
+         start_tls(sc, stalker, tls_user);
+      else
+      {
+         printf("Using SMTP server without logging into it.\nThese are the available SMTP Caps:\n");
+         show_smtpcaps(&scaps);
+      }
    }
 }
 
