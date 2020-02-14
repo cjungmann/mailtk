@@ -7,12 +7,12 @@
 
 typedef struct _server_credentials
 {
-   const char *account;
-   const char *host_url;
-   int         host_port;
+   const char *account;     // e.g. "you@gmail.com"
+   const char *host_url;    // e.g. "smtp.gmail.com" or "pop.gmail.com"
+   int         host_port;   // e.g. 587 or 995
 
-   const char *login;
-   const char *password;
+   const char *login;       // e.g. "you@gmail.com" (or copy pointer from account)
+   const char *password;    // e.g. "abcdefghijklmnop"
 } ServerCreds;
 
 typedef enum _smtp_error_codes
