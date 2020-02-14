@@ -5,7 +5,7 @@
 #include <code64.h>
 
 #include "smtp.h"
-#include "smtp_setcaps.h"
+#include "smtp_caps.h"
 
 int read_complete_ehlo_response(STalker *talker, char *buffer, int buff_len)
 {
@@ -72,19 +72,13 @@ int start_tls(ServerCreds *sc, STalker *open_talker, talker_user tuser)
 {
    char buffer[1024];
    int bytes_read;
-   int reqresponse;
    stk_send_line(open_talker, "STARTTLS", NULL);
 
    /* bytes_read = read_complete_ehlo_response(talker, buffer, sizeof(buffer)); */
    bytes_read = stk_recv_line(open_talker, buffer, sizeof(buffer));
    if (bytes_read > 3)
    {
-      reqresponse = atoi(buffer);
-      printf("STARTTLS start response is %d.\n", reqresponse);
-      printf("The contents of the response are:\n[32;1m%s[m\n", buffer);
-
       open_ssl_talker(open_talker, tuser, sc);
-
       return 1;
    }
 
@@ -102,10 +96,7 @@ int greet_smtp_server(SMTPCaps *scaps, const ServerCreds *sc, STalker *talker)
    int bytes_read = read_complete_ehlo_response(talker, buffer, sizeof(buffer));
    if (bytes_read)
    {
-      printf("SMTP response to EHLO:\n[31;1m%s[m\n", buffer);
-
       parse_ehlo_response(scaps, buffer, bytes_read);
-
       return 1;
    }
 
@@ -195,7 +186,7 @@ int authorize_with_login(ServerCreds *sc, STalker *stalker)
 // Include source files for one-off compile
 #include "socktalk.c"
 #include "socket.c"
-#include "smtp_setcaps.c"
+#include "smtp_caps.c"
 #include "logging.c"
 
 void use_the_smtp_tls_talker(STalker *stalker, void *data)
