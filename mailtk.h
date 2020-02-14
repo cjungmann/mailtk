@@ -3,7 +3,7 @@
 
 #include "socktalk.h"
 #include "socket.h"
-#include "smtp_setcaps.h"
+#include "smtp_caps.h"
 #include "logging.h"
 #include "smtp.h"
 

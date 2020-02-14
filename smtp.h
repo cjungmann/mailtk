@@ -1,7 +1,7 @@
 #ifndef SMTP_H
 #define SMTP_H
 
-#include "smtp_setcaps.h"
+#include "smtp_caps.h"
 #include "socktalk.h"
 #include "socket.h"
 

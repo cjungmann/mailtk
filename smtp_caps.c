@@ -1,4 +1,4 @@
-// -*- compile-command: "base=smtp_setcaps; gcc -Wall -Werror -ggdb -DSMTP_SETCAPS_MAIN -U NDEBUG -o $base ${base}.c" -*-
+// -*- compile-command: "base=smtp_caps; gcc -Wall -Werror -ggdb -DSMTP_SETCAPS_MAIN -U NDEBUG -o $base ${base}.c" -*-
 
 #include <stddef.h>    // for NULL value
 #include <stdio.h>     // for printf() in show_smtp_caps()
@@ -8,7 +8,7 @@
 
 #include <assert.h>
 
-#include "smtp_setcaps.h"
+#include "smtp_caps.h"
 #include "logging.h"
 
 void cset_starttls(SMTPCaps *caps,
