@@ -35,4 +35,4 @@ test_smtp: test_smtp.c lib${LIBNAME}.so
 
 
 clean:
-	rm -f *.o *.so logging socket socktalk smtp_caps smtp test_smtp
+	rm -f *.o *.so linedrop logging socket socktalk smtp_caps smtp test_smtp
