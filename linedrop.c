@@ -117,6 +117,26 @@ int stream_get_line(const StreamLineDropper *sld, const char **line, int *line_l
    return 0;
 }
 
+/** LineDrop functions for StreamLineDropper */
+
+void init_stream_line_drop(LineDrop *ld, StreamLineDropper *sld)
+{
+   memset(ld, 0, sizeof(LineDrop));
+   ld->data = (void*)sld;
+   ld->advance = ld_stream_advance;
+   ld->get_line = ld_stream_get_line;
+}
+
+int ld_stream_get_line(void *sld, const char **line, int *line_len)
+{
+   return stream_get_line((StreamLineDropper*)sld, line, line_len);
+}
+
+int ld_stream_advance(void *sld)
+{
+   return stream_advance((StreamLineDropper*)sld);
+}
+
 
 /***************************
  * String List Line Dropper
@@ -146,6 +166,26 @@ int list_advance(ListLineDropper *lld)
       return 1;
    else
       return 0;
+}
+
+/** LineDrop functions for ListLineDropper */
+
+void init_list_line_drop(LineDrop *ld, ListLineDropper *lld)
+{
+   memset(ld, 0, sizeof(LineDrop));
+   ld->data = (void*)lld;
+   ld->advance = ld_list_advance;
+   ld->get_line = ld_list_get_line;
+}
+
+int ld_list_get_line(void *sld, const char **line, int *line_len)
+{
+   return list_get_line((ListLineDropper*)sld, line, line_len);
+}
+
+int ld_list_advance(void *sld)
+{
+   return list_advance((ListLineDropper*)sld);
 }
 
 /************************************
@@ -197,6 +237,9 @@ void test_with_stream(void)
 
 void test_with_string_list(void)
 {
+   /**
+    * Create a LineDrop with a null-terminated string array
+    */
    const char *llist[] = {
       "This is the first line.",
       "This is the second line.",
@@ -206,6 +249,15 @@ void test_with_string_list(void)
       NULL
    };
 
+   ListLineDropper lld;
+   LineDrop        ld;
+
+   list_init_dropper(&lld, llist);
+   init_list_line_drop(&ld, &lld);
+
+   // LineDrop object, ld, is ready to use
+
+
    // Generic LineDrop variables
    const char *line;
    int line_len;
@@ -213,13 +265,6 @@ void test_with_string_list(void)
    // Debugging variablesxs
    char              debugbuffer[1024];
    int               current_line = 0;
-
-   // Stream Dropper-specific variables
-   ListLineDropper lld;
-   LineDrop        ld;
-
-   list_init_dropper(&lld, llist);
-   init_list_line_drop(&ld, &lld);
    
    do
    {

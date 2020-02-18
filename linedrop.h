@@ -1,5 +1,7 @@
-#ifndef LINESERVE_H
-#define LINESERVE_H
+#ifndef LINEDROP_H
+#define LINEDROP_H
+
+#include <stdio.h>
 
 typedef int (*dropper_advance)(void *obj);
 typedef int (*dropper_get_line)(void *obj, const char **linestr, int *line_len);
@@ -48,24 +50,9 @@ int stream_get_line(const StreamLineDropper *sld, const char **line, int *line_l
 int stream_advance(StreamLineDropper *sld);
 
 // Implement LineDrop
-
-int ld_stream_get_line(void *sld, const char **line, int *line_len)
-{
-   return stream_get_line((StreamLineDropper*)sld, line, line_len);
-}
-
-int ld_stream_advance(void *sld)
-{
-   return stream_advance((StreamLineDropper*)sld);
-}
-
-void init_stream_line_drop(LineDrop *ld, StreamLineDropper *sld)
-{
-   memset(ld, 0, sizeof(LineDrop));
-   ld->data = (void*)sld;
-   ld->advance = ld_stream_advance;
-   ld->get_line = ld_stream_get_line;
-}
+void init_stream_line_drop(LineDrop *ld, StreamLineDropper *sld);
+int ld_stream_get_line(void *sld, const char **line, int *line_len);
+int ld_stream_advance(void *sld);
 
 
 /***************************
@@ -84,24 +71,9 @@ int list_get_line(ListLineDropper *lld, const char **line, int *line_len);
 int list_advance(ListLineDropper *lld);
 
 // Implement LineDrop
-
-int ld_list_get_line(void *sld, const char **line, int *line_len)
-{
-   return list_get_line((ListLineDropper*)sld, line, line_len);
-}
-
-int ld_list_advance(void *sld)
-{
-   return list_advance((ListLineDropper*)sld);
-}
-
-void init_list_line_drop(LineDrop *ld, ListLineDropper *lld)
-{
-   memset(ld, 0, sizeof(LineDrop));
-   ld->data = (void*)lld;
-   ld->advance = ld_list_advance;
-   ld->get_line = ld_list_get_line;
-}
+void init_list_line_drop(LineDrop *ld, ListLineDropper *lld);
+int ld_list_get_line(void *sld, const char **line, int *line_len);
+int ld_list_advance(void *sld);
 
 
 
