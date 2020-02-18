@@ -20,6 +20,10 @@ const char *string_find_line_end(const char *line, const char *end_of_data)
       return NULL;
 }
 
+/**********************
+ * Stream Line Dropper
+ *********************/
+
 void stream_init_dropper(StreamLineDropper *sld, FILE *stream, char *buffer, int buffer_len)
 {
    memset(sld, 0, sizeof(StreamLineDropper));
@@ -101,7 +105,7 @@ int stream_advance(StreamLineDropper *sld)
       return stream_top_up_buffer(sld);
 }
 
-int stream_get_current_line(const StreamLineDropper *sld, const char **line, int *line_len)
+int stream_get_line(const StreamLineDropper *sld, const char **line, int *line_len)
 {
    if (sld->cur_line && sld->cur_line_end)
    {
@@ -112,20 +116,49 @@ int stream_get_current_line(const StreamLineDropper *sld, const char **line, int
 
    return 0;
 }
-   
 
+
+/***************************
+ * String List Line Dropper
+ **************************/
+
+void list_init_dropper(ListLineDropper *lld, const char **source)
+{
+   memset(lld, 0, sizeof(ListLineDropper));
+   lld->source = lld->current = source;
+}
+
+int list_get_line(ListLineDropper *lld, const char **line, int *line_len)
+{
+   if (*lld->current)
+   {
+      *line = *lld->current;
+      *line_len = strlen(*line);
+      return 1;
+   }
+   else
+      return 0;
+}
+
+int list_advance(ListLineDropper *lld)
+{
+   if (*lld->current && *++lld->current)
+      return 1;
+   else
+      return 0;
+}
+
+/************************************
+ * Conditionally-compiled test code.
+ ***********************************/
 
 #ifdef LINEDROP_MAIN
 
 #include <stdio.h>
 
-int main(int argc, const char **argv)
+void test_with_stream(void)
 {
-   char              buffer[1024];
-   StreamLineDropper sld;
-
-   FILE *stream = fopen("linedrop.c", "r");
-
+   // Generic LineDrop variables
    const char *line;
    int line_len;
    
@@ -133,14 +166,19 @@ int main(int argc, const char **argv)
    char              debugbuffer[1024];
    int               current_line = 0;
 
+   // Stream Dropper-specific variables
+   char              buffer[1024];
+   StreamLineDropper sld;
+   LineDrop          ld;
 
+   FILE *stream = fopen("linedrop.c", "r");
    if (stream)
    {
       stream_init_dropper(&sld, stream, buffer, sizeof(buffer));
-
+      init_stream_line_drop(&ld, &sld);
       do
       {
-         stream_get_current_line(&sld, &line, &line_len);
+         DropGetLine(&ld, &line, &line_len);
 
          ++current_line;
 
@@ -151,11 +189,60 @@ int main(int argc, const char **argv)
          // For std display
          printf("%3d [32;1m%.*s[m\n", current_line, line_len, line);
       }
-      while(stream_advance(&sld));
+      while(DropAdvance(&ld));
 
       fclose(stream);
    }
+ }
 
+void test_with_string_list(void)
+{
+   const char *llist[] = {
+      "This is the first line.",
+      "This is the second line.",
+      "This is the third line.",
+      "This is the fourth line.",
+      "This is the fifth line.",
+      NULL
+   };
+
+   // Generic LineDrop variables
+   const char *line;
+   int line_len;
+   
+   // Debugging variablesxs
+   char              debugbuffer[1024];
+   int               current_line = 0;
+
+   // Stream Dropper-specific variables
+   ListLineDropper lld;
+   LineDrop        ld;
+
+   list_init_dropper(&lld, llist);
+   init_list_line_drop(&ld, &lld);
+   
+   do
+   {
+      DropGetLine(&ld, &line, &line_len);
+
+      ++current_line;
+
+      // For gdb display 
+      memset(debugbuffer, 0, sizeof(debugbuffer));
+      sprintf(debugbuffer, "%3d %.*s", current_line, line_len, line);
+
+      // For std display
+      printf("%3d [32;1m%.*s[m\n", current_line, line_len, line);
+   }
+   while(DropAdvance(&ld));
+
+ }
+
+int main(int argc, const char **argv)
+{
+   /* test_with_stream(); */
+
+   test_with_string_list();
 
    return 0;
 }
