@@ -15,6 +15,6 @@ a project's needs.
 
 ## Funny Name
 
-I can't remember what "TK" stands for.  It made some small amount of
-sense when I dreamed it up.
+I wanted to use a name that is relatively unique.  The **TK** in
+**mailtk** stands for "Tool Kit".
 
