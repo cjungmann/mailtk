@@ -101,7 +101,7 @@ void log_ssl_error(const SSL *ssl, int return_value)
    }
 }
 
-int open_socket_talker(const char *host_url, int host_port, void *data, talker_user callback)
+int open_socket_talker(talker_user callback, const char *host_url, int host_port, void *data)
 {
    struct addrinfo hints;
    struct addrinfo *ai_chain, *rp;
@@ -177,7 +177,7 @@ int open_socket_talker(const char *host_url, int host_port, void *data, talker_u
  * This function assumes that open_talker is a regular socket talker
  * because it will use the socket member to open SSL.
  */
-void open_ssl_talker(STalker *open_talker, void *data, talker_user callback)
+void open_ssl_talker(talker_user callback, STalker *open_talker, void *data)
 {
    const SSL_METHOD *method;
    SSL_CTX *context;
@@ -509,7 +509,7 @@ int main(int argc, const char **argv)
    const char *host_url = "smtp.gmail.com";
    int host_port = 587;
    
-   int exit_code = open_socket_talker(host_url, host_port, NULL, use_the_talker);
+   int exit_code = open_socket_talker(use_the_talker, host_url, host_port, NULL);
    if (exit_code)
    {
       fprintf(stderr,
