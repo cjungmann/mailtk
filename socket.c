@@ -101,7 +101,7 @@ void log_ssl_error(const SSL *ssl, int return_value)
    }
 }
 
-int open_socket_talker(const char *host_url, int host_port, talker_user tuser, void *data)
+int open_socket_talker(const char *host_url, int host_port, void *data, talker_user callback)
 {
    struct addrinfo hints;
    struct addrinfo *ai_chain, *rp;
@@ -163,7 +163,7 @@ int open_socket_talker(const char *host_url, int host_port, talker_user tuser, v
             memset(&talker, 0, sizeof(talker));
             init_sock_talker(&talker, open_socket);
 
-            (*tuser)(&talker, data);
+            (*callback)(&talker, data);
 
             close(open_socket);
          }
@@ -177,7 +177,7 @@ int open_socket_talker(const char *host_url, int host_port, talker_user tuser, v
  * This function assumes that open_talker is a regular socket talker
  * because it will use the socket member to open SSL.
  */
-void open_ssl_talker(STalker *open_talker, talker_user tuser, void *data)
+void open_ssl_talker(STalker *open_talker, void *data, talker_user callback)
 {
    const SSL_METHOD *method;
    SSL_CTX *context;
@@ -223,7 +223,7 @@ void open_ssl_talker(STalker *open_talker, talker_user tuser, void *data)
                STalker ssl_talker;
                init_ssl_talker(&ssl_talker, ssl);
 
-               (*tuser)(&ssl_talker, data);
+               (*callback)(&ssl_talker, data);
             }
             else if (connect_outcome == 0)
             {
@@ -509,7 +509,7 @@ int main(int argc, const char **argv)
    const char *host_url = "smtp.gmail.com";
    int host_port = 587;
    
-   int exit_code = open_socket_talker(host_url, host_port, use_the_talker, NULL);
+   int exit_code = open_socket_talker(host_url, host_port, NULL, use_the_talker);
    if (exit_code)
    {
       fprintf(stderr,
@@ -525,5 +525,5 @@ int main(int argc, const char **argv)
 
 
 /* Local Variables: */
-/* compile-command: "base=socket; gcc -Wall -Werror -ggdb -DSOCKET_MAIN -U NDEBUG  -o $base ${base}.c -lssl" */
+/* compile-command: "base=socket; gcc -Wall -Werror -ggdb -DSOCKET_MAIN -U NDEBUG  -o $base ${base}.c -lssl -lcrypto" */
 /* End: */

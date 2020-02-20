@@ -10,8 +10,8 @@ typedef struct _socket_handle
    STalker talker;
 } SockHandle;
 
-int open_socket_talker(const char *host_url, int host_port, talker_user tuser, void *data);
-void open_ssl_talker(STalker *open_talker, talker_user tuser, void *data);
+int open_socket_talker(const char *host_url, int host_port, void *data, talker_user callback);
+void open_ssl_talker(STalker *open_talker, void *data, talker_user callback);
 
 #endif
 
