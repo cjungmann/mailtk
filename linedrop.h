@@ -3,25 +3,35 @@
 
 #include <stdio.h>
 
+struct _line_drop;
+
 typedef int (*dropper_advance)(void *obj);
 typedef int (*dropper_get_line)(void *obj, const char **linestr, int *line_len);
 
+// This function, if implemented, indicates if the loop should continue.
+// That is, return non-zero to continue looping, 0 to terminate.
+typedef int (*dropper_break_check)(const struct _line_drop *ld);
+
 typedef struct _line_drop
 {
-   void             *data;
-   dropper_advance  advance;
-   dropper_get_line get_line;
+   void                *data;
+   dropper_advance     advance;
+   dropper_get_line    get_line;
+   dropper_break_check break_check;
 } LineDrop;
+
+// Built-in implementation of dropper_break_check for an empty line:
+int LineDrop_break_on_empty_line(const LineDrop *ld);
 
 static inline int DropAdvance(void *obj)
 {
    LineDrop *ld = (LineDrop*)obj;
-   return ld->advance(ld->data);
+   return ld->advance(ld->data) && (!ld->break_check || !ld->break_check(ld));
 }
 
-static inline int DropGetLine(void *obj, const char **line, int *line_len)
+static inline int DropGetLine(const void *obj, const char **line, int *line_len)
 {
-   LineDrop *ld = (LineDrop*)obj;
+   const LineDrop *ld = (LineDrop*)obj;
    return ld->get_line(ld->data, line, line_len);
 }
 

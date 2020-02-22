@@ -20,6 +20,22 @@ const char *string_find_line_end(const char *line, const char *end_of_data)
       return NULL;
 }
 
+/***********
+ * LineDrop 
+ **********/
+
+int LineDrop_break_on_empty_line(const LineDrop *ld)
+{
+   const char *line;
+   int line_len;
+   if (DropGetLine(ld, &line, &line_len))
+      return line_len==0;
+   else
+      return 0;
+}
+
+
+
 /**********************
  * Stream Line Dropper
  *********************/
@@ -170,12 +186,26 @@ int list_advance(ListLineDropper *lld)
 
 /** LineDrop functions for ListLineDropper */
 
+/**
+ * Prepare an uninitialized LineDrop 'object' with an initialized ListLineDropper.
+ *
+ * Besides installing the appropriate function pointers for ListLineDropper,
+ * this function also sets a default break check function that
+ * causes DropAdvance to return 0 when an empty line is encountered.
+ *
+ * Other applications may want to break on another condition, or not
+ * break at all, which would require a custom function or setting
+ * LineDrop::break_check to NULL, respectively.
+ *
+ * Look at linedrop.h for the dropper_break_check function pointer typedef.
+ */
 void init_list_line_drop(LineDrop *ld, ListLineDropper *lld)
 {
    memset(ld, 0, sizeof(LineDrop));
    ld->data = (void*)lld;
    ld->advance = ld_list_advance;
    ld->get_line = ld_list_get_line;
+   ld->break_check = LineDrop_break_on_empty_line;
 }
 
 int ld_list_get_line(void *sld, const char **line, int *line_len)
@@ -246,6 +276,8 @@ void test_with_string_list(void)
       "This is the third line.",
       "This is the fourth line.",
       "This is the fifth line.",
+      "",
+      "This sixth line should not appear after the empty line.",
       NULL
    };
 
@@ -254,6 +286,8 @@ void test_with_string_list(void)
 
    list_init_dropper(&lld, llist);
    init_list_line_drop(&ld, &lld);
+
+   ld.break_check = LineDrop_break_on_empty_line;
 
    // LineDrop object, ld, is ready to use
 
