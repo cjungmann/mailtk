@@ -1,4 +1,4 @@
-// -*- compile-command: "base=linedrop; gcc -Wall -Werror -ggdb -DLINEDROP_MAIN -U NDEBUG -o $base ${base}.c" -*-
+// -*- compile-command: "base=linedrop; gcc -Wall -Werror -ggdb -DLINEDROP_MAIN -DDEBUG -o $base ${base}.c" -*-
 
 #include <stdio.h>     // for fread()
 #include <string.h>    // for memmove()
@@ -34,6 +34,25 @@ int LineDrop_break_on_empty_line(const LineDrop *ld)
       return 0;
 }
 
+void DropInitialize(LineDrop            *new_line_drop,
+                    void                *data,
+                    dropper_advance     advance_func,
+                    dropper_get_line    get_line_func,
+                    dropper_spent       spent_func,
+                    dropper_break_check break_check_func)
+{
+   memset(new_line_drop, 0, sizeof(LineDrop));
+
+   new_line_drop->data     = data;
+   new_line_drop->advance  = advance_func;
+   new_line_drop->get_line = get_line_func;
+   new_line_drop->is_spent = spent_func;
+
+   if (break_check_func)
+      new_line_drop->break_check = break_check_func;
+   else
+      new_line_drop->break_check = LineDrop_break_on_empty_line;
+}
 
 
 /**********************
@@ -133,14 +152,20 @@ int stream_get_line(const StreamLineDropper *sld, const char **line, int *line_l
    return 0;
 }
 
+int stream_spent(const StreamLineDropper *sld)
+{
+   return sld->stream == NULL;
+}
+
 /** LineDrop functions for StreamLineDropper */
 
 void init_stream_line_drop(LineDrop *ld, StreamLineDropper *sld)
 {
-   memset(ld, 0, sizeof(LineDrop));
-   ld->data = (void*)sld;
-   ld->advance = ld_stream_advance;
-   ld->get_line = ld_stream_get_line;
+   DropInitialize(ld,
+                  sld,
+                  ld_stream_advance,
+                  ld_stream_get_line,
+                  ld_stream_spent, NULL);
 }
 
 int ld_stream_get_line(void *sld, const char **line, int *line_len)
@@ -151,6 +176,11 @@ int ld_stream_get_line(void *sld, const char **line, int *line_len)
 int ld_stream_advance(void *sld)
 {
    return stream_advance((StreamLineDropper*)sld);
+}
+
+int ld_stream_spent(const void *sld)
+{
+   return stream_spent((const StreamLineDropper*)sld);
 }
 
 
@@ -184,6 +214,11 @@ int list_advance(ListLineDropper *lld)
       return 0;
 }
 
+int list_spent(const ListLineDropper *lld)
+{
+   return *lld->current == NULL;
+}
+
 /** LineDrop functions for ListLineDropper */
 
 /**
@@ -201,11 +236,12 @@ int list_advance(ListLineDropper *lld)
  */
 void init_list_line_drop(LineDrop *ld, ListLineDropper *lld)
 {
-   memset(ld, 0, sizeof(LineDrop));
-   ld->data = (void*)lld;
-   ld->advance = ld_list_advance;
-   ld->get_line = ld_list_get_line;
-   ld->break_check = LineDrop_break_on_empty_line;
+   DropInitialize(ld,
+                  lld,
+                  ld_list_advance,
+                  ld_list_get_line,
+                  ld_list_spent,
+                  NULL);
 }
 
 int ld_list_get_line(void *sld, const char **line, int *line_len)
@@ -216,6 +252,11 @@ int ld_list_get_line(void *sld, const char **line, int *line_len)
 int ld_list_advance(void *sld)
 {
    return list_advance((ListLineDropper*)sld);
+}
+
+int ld_list_spent(const void *sld)
+{
+   return list_spent((ListLineDropper*)sld);
 }
 
 /************************************
