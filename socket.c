@@ -525,5 +525,5 @@ int main(int argc, const char **argv)
 
 
 /* Local Variables: */
-/* compile-command: "base=socket; gcc -Wall -Werror -ggdb -DSOCKET_MAIN -U NDEBUG  -o $base ${base}.c -lssl -lcrypto" */
+/* compile-command: "base=socket; gcc -Wall -Werror -ggdb -DSOCKET_MAIN -DDEBUG  -o $base ${base}.c -lssl -lcrypto" */
 /* End: */

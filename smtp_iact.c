@@ -1,4 +1,4 @@
-// -*- compile-command: "base=smtp_iact; gcc -Wall -Werror -ggdb -DSMTP_IACT_MAIN -U NDEBUG -o $base ${base}.c -Wl,-L,. -lmailtk" -*-
+// -*- compile-command: "base=smtp_iact; gcc -Wall -Werror -ggdb -DSMTP_IACT_MAIN -DDEBUG -o $base ${base}.c -Wl,-L,. -lmailtk" -*-
 
 #include "smtp_iact.h"
 #include <alloca.h>

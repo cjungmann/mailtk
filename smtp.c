@@ -1,4 +1,4 @@
-// -*- compile-command: "base=smtp; gcc -Wall -Werror -ggdb -DSMTP_MAIN -U NDEBUG -o $base ${base}.c -lssl -lcrypto -lcode64" -*-
+// -*- compile-command: "base=smtp; gcc -Wall -Werror -ggdb -DSMTP_MAIN -DDEBUG -o $base ${base}.c -lssl -lcrypto -lcode64" -*-
 
 #include <string.h>
 #include <ctype.h>  // for isspace()

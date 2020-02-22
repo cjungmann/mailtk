@@ -1,4 +1,4 @@
-// -*- compile-command: "base=logging; gcc -Wall -Werror -ggdb -DLOGGING_MAIN -U NDEBUG -o $base ${base}.c" -*-
+// -*- compile-command: "base=logging; gcc -Wall -Werror -ggdb -DLOGGING_MAIN -DDEBUG -o $base ${base}.c" -*-
 
 #include <stdio.h>
 #include <stdarg.h>

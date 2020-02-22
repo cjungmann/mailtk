@@ -1,4 +1,4 @@
-// -*- compile-command: "base=smtp_caps; gcc -Wall -Werror -ggdb -DSMTP_SETCAPS_MAIN -U NDEBUG -o $base ${base}.c" -*-
+// -*- compile-command: "base=smtp_caps; gcc -Wall -Werror -ggdb -DSMTP_SETCAPS_MAIN -DDEBUG -o $base ${base}.c" -*-
 
 #include <stddef.h>    // for NULL value
 #include <stdio.h>     // for printf() in show_smtp_caps()
