@@ -1,11 +1,13 @@
 #ifndef MAILTK_H
 #define MAILTK_H
 
-#include "socktalk.h"
-#include "socket.h"
-#include "smtp_caps.h"
+#include "linedrop.h"
 #include "logging.h"
 #include "smtp.h"
+#include "smtp_caps.h"
+#include "smtp_iact.h"
+#include "socktalk.h"
+#include "socket.h"
 
 
 
