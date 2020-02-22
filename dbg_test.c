@@ -31,10 +31,10 @@ const char *get_recip_class(const RecipLink *rchain)
 
 void dump_recip_list(const RecipLink *rchain)
 {
-   printf("%7s %80s %10s.\n", "class", "email address", "smtp_reply");
+   printf("%7s %-80s %10s.\n", "class", "email address", "smtp_reply");
    while (rchain)
    {
-      printf("%7s %80s %10d\n",
+      printf("%7s %-80s %10d\n",
              get_recip_class(rchain),
              rchain->address,
              rchain->smtp_status);
