@@ -54,7 +54,7 @@ int read_complete_ehlo_response(STalker *talker, char *buffer, int buff_len)
             {
                cur_line = end_cur_line;
                while (cur_line < end_of_data && isspace(*cur_line))
-                  ++cur_line;
+                   ++cur_line;
             }
          }
          else  // If not a complete line, break while() to retrieve another batch of bytes
@@ -68,7 +68,7 @@ int read_complete_ehlo_response(STalker *talker, char *buffer, int buff_len)
    return end_of_data - buffer;
 }
 
-int start_tls(ServerCreds *sc, STalker *open_talker, talker_user tuser)
+int start_tls(talker_user callback, STalker *open_talker, void *data)
 {
    char buffer[1024];
    int bytes_read;
@@ -78,20 +78,20 @@ int start_tls(ServerCreds *sc, STalker *open_talker, talker_user tuser)
    bytes_read = stk_recv_line(open_talker, buffer, sizeof(buffer));
    if (bytes_read > 3)
    {
-      open_ssl_talker(open_talker, tuser, sc);
+      open_ssl_talker(callback, open_talker, data);
       return 1;
    }
 
    return 0;
 }
 
-int greet_smtp_server(SMTPCaps *scaps, const ServerCreds *sc, STalker *talker)
+int greet_smtp_server(SMTPCaps *scaps, const char *host_url, STalker *talker)
 {
    char buffer[1024];
    
    memset(scaps, 0, sizeof(SMTPCaps));
 
-   stk_send_line(talker, "EHLO ", sc->host_url, NULL);
+   stk_send_line(talker, "EHLO ", host_url, NULL);
 
    int bytes_read = read_complete_ehlo_response(talker, buffer, sizeof(buffer));
    if (bytes_read)
@@ -99,6 +99,54 @@ int greet_smtp_server(SMTPCaps *scaps, const ServerCreds *sc, STalker *talker)
       parse_ehlo_response(scaps, buffer, bytes_read);
       return 1;
    }
+
+   return 0;
+}
+
+int authorize_with_login(const char *login, const char *password, STalker *stalker)
+{
+   char buffer[1024];
+   int bytes_received = 0;
+   int reply_status;
+
+   stk_send_line(stalker, "AUTH LOGIN", NULL);
+   bytes_received = stk_recv_line(stalker, buffer, sizeof(buffer));
+   if (bytes_received)
+   {
+      buffer[bytes_received] = '\0';
+      reply_status = atoi(buffer);
+
+      if (reply_status >= 300 && reply_status < 400)
+      {
+         c64_encode_to_buffer(login, strlen(login), (uint32_t*)&buffer, sizeof(buffer));
+
+         stk_send_line(stalker, buffer, NULL);
+         bytes_received = stk_recv_line(stalker, buffer, sizeof(buffer));
+         buffer[bytes_received] = '\0';
+         reply_status = atoi(buffer);
+
+         if (reply_status >= 300 && reply_status < 400)
+         {
+            c64_encode_to_buffer(password, strlen(password), (uint32_t*)&buffer, sizeof(buffer));
+
+            stk_send_line(stalker, buffer, NULL);
+            bytes_received = stk_recv_line(stalker, buffer, sizeof(buffer));
+            buffer[bytes_received] = '\0';
+            reply_status = atoi(buffer);
+
+            if (reply_status >= 200 && reply_status < 300)
+               return SMTP_SUCCESS;
+            else
+               return SMTP_ERROR_AUTH_WRONG_PASSWORD;
+         }
+         else
+            return SMTP_ERROR_AUTH_LOGIN_REFUSED;
+      }
+      else
+         return SMTP_ERROR_AUTH_REFUSED;
+   }
+   else
+      return SMTP_ERROR_NO_RESPONSE;
 
    return 0;
 }
@@ -130,56 +178,6 @@ int greet_smtp_server(SMTPCaps *scaps, const ServerCreds *sc, STalker *talker)
  * 
  */
 
-int in_status_range(const char *str, int lowest, int too_high)
-{
-   int status = atoi(str);
-   return status >= lowest && status < too_high;
-}
-
-
-int authorize_with_login(ServerCreds *sc, STalker *stalker)
-{
-   char buffer[1024];
-   int bytes_received = 0;
-
-   stk_send_line(stalker, "AUTH LOGIN", NULL);
-   bytes_received = stk_recv_line(stalker, buffer, sizeof(buffer));
-   if (bytes_received)
-   {
-      buffer[bytes_received] = '\0';
-
-      if (in_status_range(buffer, 300, 400))
-      {
-         c64_encode_to_buffer(sc->login, strlen(sc->login), (uint32_t*)&buffer, sizeof(buffer));
-
-         stk_send_line(stalker, buffer, NULL);
-         bytes_received = stk_recv_line(stalker, buffer, sizeof(buffer));
-         buffer[bytes_received] = '\0';
-
-         if (in_status_range(buffer, 300, 400))
-         {
-            c64_encode_to_buffer(sc->password, strlen(sc->password), (uint32_t*)&buffer, sizeof(buffer));
-
-            stk_send_line(stalker, buffer, NULL);
-            bytes_received = stk_recv_line(stalker, buffer, sizeof(buffer));
-            buffer[bytes_received] = '\0';
-
-            if (in_status_range(buffer, 200, 300))
-               return SMTP_SUCCESS;
-            else
-               return SMTP_ERROR_AUTH_WRONG_PASSWORD;
-         }
-         else
-            return SMTP_ERROR_AUTH_LOGIN_REFUSED;
-      }
-      else
-         return SMTP_ERROR_AUTH_REFUSED;
-   }
-   else
-      return SMTP_ERROR_NO_RESPONSE;
-
-   return 0;
-}
 
 #include "sample_creds.c"
 
@@ -194,11 +192,11 @@ void use_the_smtp_tls_talker(STalker *stalker, void *data)
    SMTPCaps scaps;
    ServerCreds *sc = (ServerCreds*)data;
    SMTPError serror;
-   if (greet_smtp_server(&scaps, sc, stalker))
+   if (greet_smtp_server(&scaps, sc->host_url, stalker))
    {
       if (cget_auth_login(&scaps))
       {
-         serror = authorize_with_login(sc, stalker);
+         serror = authorize_with_login(sc->login, sc->password, stalker);
          if (serror)
             printf("Authorization failed with %d.\n", serror);
          else
@@ -215,12 +213,11 @@ void use_the_smtp_talker(STalker *stalker, void *data)
    ServerCreds *sc = (ServerCreds*)data;
    SMTPCaps scaps;
 
-   
-   if (greet_smtp_server(&scaps, sc, stalker))
+   if (greet_smtp_server(&scaps, sc->host_url, stalker))
    {
       show_smtpcaps(&scaps);
       printf("About to start_tls.\n");
-      start_tls(sc, stalker, use_the_smtp_tls_talker);
+      start_tls(stalker, data, use_the_smtp_tls_talker);
    }
    else
       printf("There was a problem with greet_smtp_server().\n");
@@ -236,7 +233,7 @@ int main(int argc, const char **argv)
    ServerCreds sc;
    init_server_creds(&sc);
 
-   int exit_code = open_socket_talker(sc.host_url, sc.host_port, use_the_smtp_talker, &sc);
+   int exit_code = open_socket_talker(use_the_smtp_talker, sc.host_url, sc.host_port, &sc);
    if (exit_code)
    {
       fprintf(stderr,
