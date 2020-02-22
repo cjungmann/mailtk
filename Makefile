@@ -5,7 +5,7 @@ LIBNAME = mailtk
 
 LOCAL_LINK = -Wl,-R -Wl,. -l${LIBNAME}
 
-MODULES = linedrop.o logging.o socket.o socktalk.o smtp_caps.o smtp.o
+MODULES = linedrop.o logging.o socket.o socktalk.o smtp_caps.o smtp.o smtp_iact.o
 
 # release: LIB_CFLAGS := $( filter-out -ggdb -DDEBUG,$(LIB_CFLAGS) )
 # release: lib${LIBNAME}
@@ -32,6 +32,9 @@ smtp_caps.o : smtp_caps.c smtp_caps.h
 
 smtp.o : smtp.c smtp.h
 	$(CC) $(LIB_CFLAGS) -c -o smtp.o smtp.c
+
+smtp_iact.o : smtp_iact.c smtp_iact.h
+	$(CC) $(LIB_CFLAGS) -c -o smtp_iact.o smtp_iact.c
 
 test_smtp: test_smtp.c lib${LIBNAME}.so
 	$(CC) ${BASEFLAGS} -L. -o test_smtp test_smtp.c ${LOCAL_LINK}
