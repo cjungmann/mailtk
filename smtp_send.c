@@ -1,4 +1,4 @@
-// -*- compile-command: "base=smtp_send; gcc -Wall -Werror -ggdb -U NDEBUG -o $base ${base}.c -Wl,-R,. libmailtk.so" -*-
+// -*- compile-command: "base=smtp_send; gcc -Wall -Werror -ggdb -DDEBUG -o $base ${base}.c -Wl,-R,. libmailtk.so" -*-
 
 #include "mailtk.h"
 #include "sample_creds.c"
