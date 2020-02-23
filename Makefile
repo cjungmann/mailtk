@@ -10,9 +10,9 @@ MODULES = linedrop.o logging.o socket.o socktalk.o smtp_caps.o smtp.o smtp_iact.
 # release: LIB_CFLAGS := $( filter-out -ggdb -DDEBUG,$(LIB_CFLAGS) )
 # release: lib${LIBNAME}
 
-all : lib${LIBNAME} test_smtp
+all : lib${LIBNAME}.so
 
-lib${LIBNAME} : $(MODULES) ${LIBNAME}.h
+lib${LIBNAME}.so : $(MODULES) ${LIBNAME}.h
 	$(CC) $(LIB_CFLAGS) -o lib${LIBNAME}.so $(MODULES) -lssl -lcrypto -lcode64
 
 linedrop.o : linedrop.c linedrop.h
@@ -35,9 +35,6 @@ smtp.o : smtp.c smtp.h
 
 smtp_iact.o : smtp_iact.c smtp_iact.h
 	$(CC) $(LIB_CFLAGS) -c -o smtp_iact.o smtp_iact.c
-
-test_smtp: test_smtp.c lib${LIBNAME}.so
-	$(CC) ${BASEFLAGS} -L. -o test_smtp test_smtp.c ${LOCAL_LINK}
 
 
 clean:
