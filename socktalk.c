@@ -118,40 +118,59 @@ int log_status_reply_errors(const char *buffer, int buffer_len)
 
 int stk_sock_talker(const struct _stalker* talker, const void *data, int data_len)
 {
-   return send(talker->socket_handle, (void*)data, data_len, 0);
+   return send(*(int*)talker->conduit, (void*)data, data_len, 0);
 }
 
 int stk_ssl_talker(const struct _stalker* talker, const void *data, int data_len)
 {
-   return SSL_write(talker->ssl_handle, data, data_len);
+   return SSL_write((SSL*)talker->conduit, data, data_len);
 }
 
 int stk_sock_reader(const struct _stalker* talker, void *buffer, int buff_len)
 {
-   return recv(talker->socket_handle, buffer, buff_len, 0);
+   return recv(*(int*)talker->conduit, buffer, buff_len, 0);
 }
 
 int stk_ssl_reader(const struct _stalker* talker, void *buffer, int buff_len)
 {
-   return SSL_read(talker->ssl_handle, buffer, buff_len);
+   return SSL_read((SSL*)talker->conduit, buffer, buff_len);
 }
 
 
 void init_ssl_talker(struct _stalker* talker, SSL* ssl)
 {
    memset(talker, 0, sizeof(struct _stalker));
-   talker->ssl_handle = (void*)ssl;
+   talker->conduit = ssl;
    talker->writer = stk_ssl_talker;
    talker->reader = stk_ssl_reader;
 }
 
-void init_sock_talker(struct _stalker* talker, int socket)
+void init_sock_talker(struct _stalker* talker, int* socket)
 {
    memset(talker, 0, sizeof(struct _stalker));
-   talker->socket_handle = socket;
+   talker->conduit = socket;
    talker->writer = stk_sock_talker;
    talker->reader = stk_sock_reader;
 }
+
+int is_socket_talker(const STalker *talker)
+{
+   return talker->writer == stk_sock_talker && talker->conduit != NULL;
+}
+
+int is_ssl_talker(const STalker *talker)
+{
+   return talker->writer == stk_ssl_talker && talker->conduit != NULL;
+}
+
+int get_socket_handle(const STalker *talker)
+{
+   if (is_socket_talker(talker))
+      return *(int*)talker->conduit;
+   else
+      return 0;
+}
+   
 
 /**
  * @brief Sends data by char* and byte count.  To be paired with use of BuffControl object.

@@ -58,16 +58,18 @@ typedef struct _status_line
 
 typedef struct _stalker
 {
-   SSL*       ssl_handle;       // pointer to socket handle OR SSH structure
-   int        socket_handle;
+   void       *conduit;
    SockWriter writer;
    SockReader reader;
 } STalker;
 
 /** STalker initialization functions to prepare STalker to call send_line, recv_line. */
 void init_ssl_talker(struct _stalker* talker, SSL* ssl);
-void init_sock_talker(struct _stalker* talker, int socket);
+void init_sock_talker(struct _stalker* talker, int* socket);
 
+int is_socket_talker(const STalker *talker);
+int is_ssl_talker(const STalker *talker);
+int get_socket_handle(const STalker *talker);
 
 /**
  * Functions that actually read or write using the STalker object.

@@ -161,7 +161,7 @@ int open_socket_talker(talker_user callback, const char *host_url, int host_port
          {
             STalker talker;
             memset(&talker, 0, sizeof(talker));
-            init_sock_talker(&talker, open_socket);
+            init_sock_talker(&talker, &open_socket);
 
             (*callback)(&talker, data);
 
@@ -184,7 +184,7 @@ void open_ssl_talker(talker_user callback, STalker *open_talker, void *data)
    SSL *ssl;
    int connect_outcome;
 
-   assert(open_talker->socket_handle);
+   assert(is_socket_talker(open_talker));
 
    OpenSSL_add_all_algorithms();
    /* err_load_bio_strings(); */
@@ -214,7 +214,7 @@ void open_ssl_talker(talker_user callback, STalker *open_talker, void *data)
          ssl = SSL_new(context);
          if (ssl)
          {
-            SSL_set_fd(ssl, open_talker->socket_handle);
+            SSL_set_fd(ssl, get_socket_handle(open_talker));
 
             connect_outcome = SSL_connect(ssl);
 
