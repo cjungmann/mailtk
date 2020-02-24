@@ -41,6 +41,7 @@ int log_status_reply_errors(const char *buffer, int buffer_len);
 
 int stk_sock_talker(const struct _stalker* talker, const void *data, int data_len);
 int stk_ssl_talker(const struct _stalker* talker, const void *data, int data_len);
+int stk_stdout_talker(const struct _stalker* talker, const void *data, int data_len);
 
 int stk_sock_reader(const struct _stalker* talker, void *buffer, int buff_len);
 int stk_ssl_reader(const struct _stalker* talker, void *buffer, int buff_len);
@@ -66,6 +67,7 @@ typedef struct _stalker
 /** STalker initialization functions to prepare STalker to call send_line, recv_line. */
 void init_ssl_talker(struct _stalker* talker, SSL* ssl);
 void init_sock_talker(struct _stalker* talker, int* socket);
+void init_stdout_talker(struct _stalker *talker);
 
 int is_socket_talker(const STalker *talker);
 int is_ssl_talker(const STalker *talker);

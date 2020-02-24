@@ -126,6 +126,19 @@ int stk_ssl_talker(const struct _stalker* talker, const void *data, int data_len
    return SSL_write((SSL*)talker->conduit, data, data_len);
 }
 
+/**
+ * This is a poor performer, having to copy the data to a new buffer
+ * for each call.  However, it is meant for debugging only, to see what
+ * would otherwise be send out on socket or SSL handle.
+ */
+int stk_stdout_talker(const struct _stalker* talker, const void *buffer, int data_len)
+{
+   char *copyb = (char*)alloca(data_len+1);
+   memcpy(copyb, buffer, data_len);
+   copyb[data_len] = '\0';
+   return fputs(copyb, stdout);
+}
+
 int stk_sock_reader(const struct _stalker* talker, void *buffer, int buff_len)
 {
    return recv(*(int*)talker->conduit, buffer, buff_len, 0);
@@ -151,6 +164,14 @@ void init_sock_talker(struct _stalker* talker, int* socket)
    talker->conduit = socket;
    talker->writer = stk_sock_talker;
    talker->reader = stk_sock_reader;
+}
+
+void init_stdout_talker(struct _stalker *talker)
+{
+   memset(talker, 0, sizeof(struct _stalker));
+   talker->writer = stk_stdout_talker;
+
+   // leave talker->conduit and talker->reader set to  NULL to trigger an eror if used
 }
 
 int is_socket_talker(const STalker *talker)
