@@ -45,11 +45,25 @@ void send_email(void *emailsack)
    dropper_break_check old_checker = ld->break_check;
    ld->break_check = email_termination_test;
 
+   STalker stdout_talker;
+   STalker *old_talker = NULL;
+   int write_to_stdout = 0;
+
+   if (write_to_stdout)
+   {
+      init_stdout_talker(&stdout_talker);
+      old_talker = es->stalker;
+      es->stalker = &stdout_talker;
+   }
+
    do
    {
       DropGetLine(ld, &line, &line_len);
       stk_simple_send_line(es->stalker, line, line_len);
    } while (DropAdvance(ld));
+
+   if (write_to_stdout)
+      es->stalker = old_talker;
 
    ld->break_check = old_checker;
 }
@@ -58,35 +72,57 @@ void send_email(void *emailsack)
 void send_preamble(RecipLink *rchain, void *data)
 {
    EmailSack *es = (EmailSack*)data;
+   char buffer[1024];  // for reading response to DATA line
+   int reply_status, bytes_received;
 
+   // Count is the number of email addresses accepted by
+   // the SMTP server.  There is no point in continuing
+   // if none were accepted.
    int count = smtp_send_envelope(es->stalker,
                                   es->sc.account,
                                   rchain);
 
    dump_recip_list(rchain);
 
-   /* // Disable continuation  */
-   /* count = 0; */
-
    if (count)
    {
-      LineDrop *ld = es->linedrop;
-      // Advance past recipients break line
-      if (DropAdvance(ld))
+      stk_simple_send_line(es->stalker, "DATA", 4);
+      bytes_received = stk_recv_line(es->stalker, buffer, sizeof(buffer));
+      reply_status = atoi(buffer);
+
+      if (reply_status >=300 && reply_status < 400)
       {
-         stk_simple_send_line(es->stalker, "DATA", 4);
-
-         smtp_send_headers(es->linedrop, es->stalker, rchain);
-
-         // Advance past headers break line
+         LineDrop *ld = es->linedrop;
+         // Advance past recipients break line
          if (DropAdvance(ld))
          {
-            // send a newline after all the headers have been sent:
-            stk_simple_send_line(es->stalker, "", 0);
-      
-            send_email(es);
+            smtp_send_headers(es->linedrop, es->stalker, rchain);
+
+            // Advance past headers break line
+            if (DropAdvance(ld))
+            {
+               send_email(es);
+
+               stk_send_line(es->stalker, ".", NULL);
+               stk_send_line(es->stalker, NULL);
+
+               bytes_received = stk_recv_line(es->stalker, buffer, sizeof(buffer));
+               buffer[bytes_received] = '\0';
+
+               reply_status = atoi(buffer);
+               fprintf(stderr,
+                       "Result of sending email is %d, [33;1m%s[m\n",
+                       reply_status,
+                       buffer);
+               
+            }
          }
       }
+      else
+         fprintf(stderr,
+                 "DATA message returned an error (%d): [33;1m%s[m.\n",
+                 reply_status,
+                 buffer);
    }
    else
       printf("The SMTP server is not prepared to accept any addresses.\n");
