@@ -65,19 +65,28 @@ void send_preamble(RecipLink *rchain, void *data)
 
    dump_recip_list(rchain);
 
-   // Disable continuation 
-   count = 0;
+   /* // Disable continuation  */
+   /* count = 0; */
 
    if (count)
    {
-      stk_simple_send_line(es->stalker, "DATA", 4);
+      LineDrop *ld = es->linedrop;
+      // Advance past recipients break line
+      if (DropAdvance(ld))
+      {
+         stk_simple_send_line(es->stalker, "DATA", 4);
 
-      smtp_send_headers(es->linedrop, es->stalker, rchain);
+         smtp_send_headers(es->linedrop, es->stalker, rchain);
 
-      // send a newline after all the headers have been sent:
-      stk_simple_send_line(es->stalker, "", 0);
+         // Advance past headers break line
+         if (DropAdvance(ld))
+         {
+            // send a newline after all the headers have been sent:
+            stk_simple_send_line(es->stalker, "", 0);
       
-      send_email(es);
+            send_email(es);
+         }
+      }
    }
    else
       printf("The SMTP server is not prepared to accept any addresses.\n");
@@ -88,7 +97,6 @@ void process_emails(STalker *stalker, void *emailsack)
    // Save settled-on stalker object to the EmailSack object:
    EmailSack *es = (EmailSack*)emailsack;
    es->stalker = stalker;
-
 
    build_recip_chain(send_preamble, es->linedrop, emailsack);
 }
