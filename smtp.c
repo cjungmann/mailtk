@@ -68,7 +68,7 @@ int read_complete_ehlo_response(STalker *talker, char *buffer, int buff_len)
    return end_of_data - buffer;
 }
 
-int start_tls(talker_user callback, STalker *open_talker, void *data)
+int start_tls(STalker *open_talker, void *data, talker_user callback)
 {
    char buffer[1024];
    int bytes_read;

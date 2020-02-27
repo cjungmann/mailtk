@@ -173,7 +173,7 @@ void smtp_stalker_user(STalker *stalker, void *emailsack)
    if (greet_smtp_server(&es->scaps, host_url, stalker))
    {
       if (cget_starttls(&es->scaps))
-         start_tls(smtp_tls_stalker_user, stalker, emailsack);
+         start_tls(stalker, emailsack, smtp_tls_stalker_user);
       else
          process_emails(stalker, emailsack);
    }
