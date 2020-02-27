@@ -152,7 +152,7 @@ void smtp_tls_stalker_user(STalker *stalker, void *emailsack)
    ServerCreds *sc = &es->sc;
 
    SMTPError serror;
-   if (greet_smtp_server(&es->scaps, sc->host_url, stalker))
+   if (greet_smtp_server(sc->host_url, stalker, &es->scaps))
    {
       if (cget_auth_login(&es->scaps))
       {
@@ -170,7 +170,7 @@ void smtp_stalker_user(STalker *stalker, void *emailsack)
    EmailSack *es = (EmailSack*)emailsack;
    const char *host_url = es->sc.host_url;
 
-   if (greet_smtp_server(&es->scaps, host_url, stalker))
+   if (greet_smtp_server(host_url, stalker, &es->scaps))
    {
       if (cget_starttls(&es->scaps))
          start_tls(stalker, emailsack, smtp_tls_stalker_user);

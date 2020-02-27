@@ -85,7 +85,7 @@ int start_tls(STalker *open_talker, void *data, talker_user callback)
    return 0;
 }
 
-int greet_smtp_server(SMTPCaps *scaps, const char *host_url, STalker *talker)
+int greet_smtp_server(const char *host_url, STalker *talker, SMTPCaps *scaps)
 {
    char buffer[1024];
    
@@ -192,7 +192,7 @@ void use_the_smtp_tls_talker(STalker *stalker, void *data)
    SMTPCaps scaps;
    ServerCreds *sc = (ServerCreds*)data;
    SMTPError serror;
-   if (greet_smtp_server(&scaps, sc->host_url, stalker))
+   if (greet_smtp_server(sc->host_url, stalker, &scaps))
    {
       if (cget_auth_login(&scaps))
       {
@@ -213,7 +213,7 @@ void use_the_smtp_talker(STalker *stalker, void *data)
    ServerCreds *sc = (ServerCreds*)data;
    SMTPCaps scaps;
 
-   if (greet_smtp_server(&scaps, sc->host_url, stalker))
+   if (greet_smtp_server(sc->host_url, stalker, &scaps))
    {
       show_smtpcaps(&scaps);
       printf("About to start_tls.\n");

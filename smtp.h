@@ -29,7 +29,7 @@ void init_server_creds(ServerCreds *sc);
 
 int start_tls(STalker *open_talker, void *data, talker_user callback);
 
-int greet_smtp_server(SMTPCaps *scaps, const char *host_url, STalker *talker);
+int greet_smtp_server(const char *host_url, STalker *talker, SMTPCaps *scaps);
 int authorize_with_login(const char *login, const char *password, STalker *stalker);
 
 
