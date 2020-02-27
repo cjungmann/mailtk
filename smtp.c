@@ -78,7 +78,7 @@ int start_tls(talker_user callback, STalker *open_talker, void *data)
    bytes_read = stk_recv_line(open_talker, buffer, sizeof(buffer));
    if (bytes_read > 3)
    {
-      open_ssl_talker(callback, open_talker, data);
+      open_ssl_talker(open_talker, data, callback);
       return 1;
    }
 
@@ -233,7 +233,7 @@ int main(int argc, const char **argv)
    ServerCreds sc;
    init_server_creds(&sc);
 
-   int exit_code = open_socket_talker(use_the_smtp_talker, sc.host_url, sc.host_port, &sc);
+   int exit_code = open_socket_talker(sc.host_url, sc.host_port, &sc, use_the_smtp_talker);
    if (exit_code)
    {
       fprintf(stderr,

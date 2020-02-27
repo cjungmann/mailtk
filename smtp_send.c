@@ -1,7 +1,6 @@
 // -*- compile-command: "base=smtp_send; gcc -Wall -Werror -ggdb -DDEBUG -o $base ${base}.c -Wl,-R,. libmailtk.so" -*-
 
 #include "mailtk.h"
-#include "sample_creds.c"
 
 #include "dbg_test.c"
 
@@ -12,6 +11,16 @@ typedef struct _smtp_email_sack
    STalker     *stalker;
    LineDrop    *linedrop;
 } EmailSack;
+
+typedef struct _my_data
+{
+   BaseCreds base_creds;
+   const char *account;
+   const char *login;
+   const char *password;
+} MyData;
+
+#include "sample_creds.c"
 
 /**
  * Custom dropper_break_check() function that will detect
@@ -200,6 +209,16 @@ FILE* open_cli_file(const char *filepath)
 
 int main(int argc, const char **argv)
 {
+   MyData data;
+   init_my_data(&data);
+
+   printf("Showing BaseCreds values: URL=[32;1m%s[m, port=[32;1m%d[m\n",
+          ((BaseCreds*)&data)->host_url,
+          ((BaseCreds*)&data)->host_port);
+
+   return 0;
+          
+
    EmailSack es;
    memset(&es, 0, sizeof(EmailSack));
 
@@ -223,7 +242,7 @@ int main(int argc, const char **argv)
          stream_init_dropper(&sld, strfile, buffer, sizeof(buffer));
          init_stream_line_drop(&ld, &sld);
 
-         exit_code = open_socket_talker(smtp_stalker_user, host_url, host_port, &es);
+         exit_code = open_socket_talker(host_url, host_port, &es, smtp_stalker_user);
 
          fclose(strfile);
       }
@@ -234,7 +253,7 @@ int main(int argc, const char **argv)
       list_init_dropper(&lld, email_job_array);
       init_list_line_drop(&ld, &lld);
 
-      exit_code = open_socket_talker(smtp_stalker_user, host_url, host_port, &es);
+      exit_code = open_socket_talker(host_url, host_port, &es, smtp_stalker_user);
    }
 
    if (exit_code)
