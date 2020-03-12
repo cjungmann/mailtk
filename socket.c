@@ -7,6 +7,9 @@
 #include <arpa/inet.h>   // Functions that convert addrinfo member values.
 #include <unistd.h>      // for close() function
 
+#include <fcntl.h>
+#include <sys/select.h>  // support controlable socket timeout.
+
 #include <assert.h>
 
 #include "socktalk.h"
@@ -101,17 +104,18 @@ void log_ssl_error(const SSL *ssl, int return_value)
    }
 }
 
-int open_socket_talker(const char *host_url, int host_port, void *data, talker_user callback)
+MTK_ERROR open_socket_talker(const char *host_url, int host_port, void *data, talker_user callback)
 {
    struct addrinfo hints;
    struct addrinfo *ai_chain, *rp;
 
-   int exit_value;
    int open_socket = -1, temp_socket = -1;
 
    int port_buffer_len = digits_in_base(host_port, 10) + 1;
    char *port_buffer = (char*)alloca(port_buffer_len);
-   if (itoa_buff(host_port, 10, port_buffer, port_buffer_len))
+   if (!itoa_buff(host_port, 10, port_buffer, port_buffer_len))
+      return MTKE_INT_OVERFLOW;
+   else
    {
       memset((void*)&hints, 0, sizeof(struct addrinfo));
       hints.ai_family = AF_INET;
@@ -119,9 +123,9 @@ int open_socket_talker(const char *host_url, int host_port, void *data, talker_u
       hints.ai_flags = AI_CANONNAME;
       hints.ai_protocol = IPPROTO_TCP;
 
-      exit_value = getaddrinfo(host_url, port_buffer, &hints, &ai_chain);
-
-      if (exit_value==0)
+      if (getaddrinfo(host_url, port_buffer, &hints, &ai_chain))
+         return MTKE_UNKNOWN_HOST;
+      else
       {
          rp = ai_chain;
 
@@ -135,20 +139,49 @@ int open_socket_talker(const char *host_url, int host_port, void *data, talker_u
                temp_socket = socket(rp->ai_family,
                                     rp->ai_socktype,
                                     rp->ai_protocol);
-
                break;
             }
 
             rp = rp->ai_next;
          }
 
-         // For an open socket, attempt to use it to connect
-         if (temp_socket >= 0)
+         if (temp_socket < 0)
+            return MTKE_SOCKET_UNAVAILABLE;
+         else
          {
-            if (0 == connect(temp_socket, rp->ai_addr, rp->ai_addrlen))
+            // Unblock connection to impose a time limit
+            int starting_options;
+            if ( ( (starting_options=fcntl(temp_socket, F_GETFL, NULL)) < 0 )
+                 || ( fcntl(temp_socket, F_SETFL, starting_options | O_NONBLOCK) < 0 ) )
+               return MTKE_UNBLOCKING_FAILURE;
+
+            // Two chances to connect, immediately, or during timed interval
+            if (connect(temp_socket, rp->ai_addr, rp->ai_addrlen) == 0)
                open_socket = temp_socket;
             else
-               close(temp_socket);
+            {
+               // Refer to `man 2 lect_tut`
+               struct timeval timeout;
+               timeout.tv_sec = 1;
+               timeout.tv_usec = 0;
+
+               fd_set wait_set;
+               FD_ZERO(&wait_set);
+               FD_SET(temp_socket, &wait_set);
+
+               select(temp_socket+1, NULL, &wait_set, NULL, &timeout);
+
+               if (FD_ISSET(temp_socket, &wait_set))
+                  open_socket = temp_socket;
+               else
+               {
+                  fprintf(stderr, "Timeout expired for url=\"%s\", port=%d.\n", host_url, host_port);
+                  close(temp_socket);
+               }
+            }
+
+            // Unblock the socket for subsequent execution
+            fcntl(temp_socket, F_SETFL, starting_options); 
          }
 
          // Clean up allocated memory
@@ -157,6 +190,8 @@ int open_socket_talker(const char *host_url, int host_port, void *data, talker_u
          // If successfully connected with an open socket, construct
          // an STalker and use it to invoke the callback, closing the
          // socket upon the callback's return.
+         if (open_socket < 0)
+            return MTKE_CONNECTION_TIMEOUT;
          if (open_socket >= 0)
          {
             STalker talker;
@@ -170,7 +205,7 @@ int open_socket_talker(const char *host_url, int host_port, void *data, talker_u
       }
    }
 
-   return exit_value;
+   return MTKE_SUCCESS;
 }
 
 /**
@@ -207,8 +242,8 @@ void open_ssl_talker(STalker *open_talker, void *data, talker_user callback)
          // ssl_ctx_set_verify_depth(context, 4);
 
          // we could set some flags, but i'm not doing it until i need to and i understand 'em
-         // const long ctx_flags = ssl_op_no_sslv2 | ssl_op_no_sslv3 | ssl_op_no_compression;
-         // ssl_ctx_set_options(context, ctx_flags);
+         /* const long ctx_flags = SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_COMPRESSION; */
+         /* SSL_CTX_set_options(context, ctx_flags); */
          SSL_CTX_set_options(context, SSL_OP_NO_SSLv2);
 
          ssl = SSL_new(context);
@@ -217,6 +252,24 @@ void open_ssl_talker(STalker *open_talker, void *data, talker_user callback)
             SSL_set_fd(ssl, get_socket_handle(open_talker));
 
             connect_outcome = SSL_connect(ssl);
+
+            if (connect_outcome == -1)
+            {
+               char msg[1024];
+               ERR_error_string_n(ERR_get_error(), msg, sizeof(msg));
+
+               fprintf(stderr, "msg: [32;1m%s[m, "
+                       "lib error: [32;1m%s[m, "
+                       "func error: [32;1m%s[m, "
+                       "reason: [32;1m%s[m, "
+                       "verify result: [32;1m%ld[m\n",
+                       msg,
+                       ERR_lib_error_string(0),
+                       ERR_func_error_string(0),
+                       ERR_reason_error_string(0),
+                       SSL_get_verify_result(ssl));
+            }
+
 
             if (connect_outcome == 1)
             {
