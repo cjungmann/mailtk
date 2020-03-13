@@ -1,7 +1,8 @@
-// -*- compile-command: "base=test; gcc -Wall -Werror -ggdb -DDEBUG -o $base ${base}.c -Wl,-R,. libmailtk.so" -*-
+// -*- compile-command: "base=test; gcc -Wall -Werror -ggdb -DDEBUG -o $base ${base}.c -lcode64 -Wl,-R,. libmailtk.so" -*-
 
 #include "mailtk.h"
 #include <stdio.h>
+#include <code64.h>
 
 /*******************************
  * Definitions and Prototypes
@@ -42,6 +43,9 @@ int mtk_send_credentials(STalker *talker, SocketSpec *ss);
 int mtk_is_smtp(const SocketSpec *ss) { return ss->mail_type == MT_SMTP; }
 int mtk_is_pop(const SocketSpec *ss)  { return ss->mail_type == MT_POP; }
 
+int mtk_auth_login(STalker *talker, const char *login, const char *password);
+int mtk_auth_plain(STalker *talker, const char *login, const char *password);
+
 
 /***************************
  * Internal prototypes, etc.
@@ -56,12 +60,78 @@ typedef struct _talker_callback_params
 
 void invoke_callback(STalker *talker, TCParams *tcp)
 {
-   (*tcp->callback)(talker, tcp);
+   (*tcp->callback)(talker, tcp->data);
 }
 
 
 // Implementations
 
+
+int mtk_auth_login(STalker *talker, const char *login, const char *password)
+{
+   printf("Attempting to authorize with LOGIN protocol, with %s : %s.\n", login, password);
+
+   int len_login = strlen(login);
+   int len_password = strlen(password);
+   int len_longest = len_login > len_password ? len_login : len_password;
+   int len_output = c64_encode_chars_needed(len_longest);
+   char *output = (char*)alloca(len_output);
+
+   char recv_buffer[256];
+   int recv_status;
+
+   stk_send_line(talker, "AUTH LOGIN ", NULL);
+   stk_recv_line(talker, recv_buffer, sizeof(recv_buffer));
+   recv_status = atoi(recv_buffer);
+   if (recv_status == 334)
+   {
+      c64_encode_to_buffer(login, len_login, (uint32_t*)output, len_output);
+      stk_send_line(talker, output, NULL);
+      stk_recv_line(talker, recv_buffer, sizeof(recv_buffer));
+      recv_status = atoi(recv_buffer);
+      if (recv_status == 334)
+      {
+         c64_encode_to_buffer(password, len_password, (uint32_t*)output, len_output);
+         stk_send_line(talker, output, NULL);
+         stk_recv_line(talker, recv_buffer, sizeof(recv_buffer));
+         recv_status = atoi(recv_buffer);
+         return recv_status == 235;
+      }
+   }
+
+   return 0;
+}
+
+int mtk_auth_plain(STalker *talker, const char *login, const char *password)
+{
+   printf("Attempting to authorize with PLAIN protocol, with %s : %s.\n", login, password);
+
+   int len_login = strlen(login);
+   int len_password = strlen(password);
+   int len_together = len_login + len_password + 2;
+   int len_coded = c64_encode_chars_needed(len_together);
+
+   char *source_str = (char*)alloca(len_together);
+   char *coded_str = (char*)alloca(len_coded);
+   char recv_buffer[256];
+   int recv_status;
+
+   char *ptr;
+   memcpy(source_str, login, len_login);
+   ptr = source_str + len_login;
+   *ptr++ = '\0';
+   memcpy(ptr, password, len_password);
+   ptr += len_password;
+   *ptr++ = '\0';
+
+   c64_encode_to_buffer(source_str, len_together, (uint32_t*)coded_str, len_coded);
+
+   stk_send_line(talker, "AUTH PLAIN ", coded_str, NULL);
+   stk_recv_line(talker, recv_buffer, sizeof(recv_buffer));
+   recv_status = atoi(recv_buffer);
+
+   return recv_status == 235;
+}
 
 
 const char *mtk_mail_type_str(MType mt)
@@ -92,6 +162,23 @@ int mtk_send_credentials(STalker *talker, SocketSpec *ss)
       return mtk_login(talker, ss->loggerin);
    else
       return 1;   // pretend login was successful
+}
+
+void mtk_internal_pre_return_talker(STalker *talker, void *data)
+{
+   TCParams *tcp = (TCParams*)data;
+   SocketSpec *ss = (SocketSpec*)tcp->data;
+
+   if (ss->loggerin)
+   {
+      if (!mtk_login(talker, ss->loggerin))
+      {
+         printf("Ya failed to login, yo.\n");
+         return;
+      }
+   }
+
+   invoke_callback(talker, tcp);
 }
 
 void mtk_internal_receive_ssl_talker(STalker *talker, void *data)
@@ -132,10 +219,10 @@ void mtk_internal_receive_socket_talker(STalker *talker, void *data)
          if (bytes_received < 3)
             return;
       }
-      open_ssl_talker(talker, data, mtk_internal_receive_ssl_talker);
+      open_ssl_talker(talker, data, mtk_internal_pre_return_talker);
    }
    else
-      invoke_callback(talker, tcp);
+      mtk_internal_pre_return_talker(talker, tcp);
 }
 
 int mtk_create_connection(SocketSpec *ss, mtk_talker_user callback)
@@ -179,11 +266,26 @@ int mtk_create_connection(SocketSpec *ss, mtk_talker_user callback)
 
 
 
-// Usage 
+// End-product code, that is code that uses the above code
+// as if it were a library.
 
-void mtk_use_talker(STalker *talker, void *data)
+typedef struct _my_socket_spec
 {
-   printf("In mtk_use_talker.\n");
+   SocketSpec ss;
+   const char *login;
+   const char *password;
+} MySocketSpec;
+
+void display_my_socket_spec(const MySocketSpec *mss, FILE *filestr)
+{
+   if (filestr == NULL)
+      filestr = stderr;
+
+   mtk_display_socket_spec(&mss->ss, filestr);
+
+   fprintf(filestr, "login:    [32;1m%s[m.\n", mss->login);
+   fprintf(filestr, "password: [32;1m%s[m.\n", mss->password);
+
 }
 
 
@@ -227,7 +329,7 @@ void mail_type_setter(void *option, const char *str)
    };
 }
 
-void prepare_socket_spec_from_CL(SocketSpec *ss, int argc, const char **argv)
+void prepare_socket_spec_from_CL(MySocketSpec *ss, int argc, const char **argv)
 {
    const char **end = &argv[argc];
    const char **ptr = argv + 1;
@@ -251,22 +353,32 @@ void prepare_socket_spec_from_CL(SocketSpec *ss, int argc, const char **argv)
          {
             switch(*opt)
             {
+               case 'l':    // login
+                  option_to_set = (void*)&ss->login;
+                  option_setter = str_setter;
+                  goto option_break;
+
+               case 'w':    // w
+                  option_to_set = (void*)&ss->password;
+                  option_setter = str_setter;
+                  goto option_break;
+                  
                case 'u':    // url
-                  option_to_set = (void*)&ss->host_url;
+                  option_to_set = (void*)&ss->ss.host_url;
                   option_setter = str_setter;
                   goto option_break;
 
                case 'p':   // port
-                  option_to_set = (void*)&ss->host_port;
+                  option_to_set = (void*)&ss->ss.host_port;
                   option_setter = int_setter;
                   goto option_break;
 
                case 's':   // use ssl
-                  ss->use_ssl = 1;
+                  ss->ss.use_ssl = 1;
                   break;
 
                case 't':   // email interaction type (smtp / pop)
-                  option_to_set = (void*)&ss->mail_type;
+                  option_to_set = (void*)&ss->ss.mail_type;
                   option_setter = mail_type_setter;
             }
 
@@ -280,19 +392,34 @@ void prepare_socket_spec_from_CL(SocketSpec *ss, int argc, const char **argv)
    }
 }
 
+void mtk_use_talker(STalker *talker, void *data)
+{
+   MySocketSpec *mss = (MySocketSpec*)data;
+   const char *login = mss->login;
+   const char *password = mss->password;
+
+   /* if (mtk_auth_login(talker, login, password)) */
+   if (mtk_auth_plain(talker, login, password))
+      printf("Ready to send some emails!\n");
+   else
+      printf("Failed to authorize.\n");
+}
+
+
 
 // End of command line processing functions
 
 int main(int argc, const char **argv)
 {
-   SocketSpec ss;
-   memset(&ss, 0, sizeof(ss));
+   MySocketSpec mss;
+   memset(&mss, 0, sizeof(mss));
 
-   prepare_socket_spec_from_CL(&ss, argc, argv);
+   prepare_socket_spec_from_CL(&mss, argc, argv);
 
-   mtk_display_socket_spec(&ss, NULL);
+   display_my_socket_spec(&mss, NULL);
 
-   mtk_create_connection(&ss, mtk_use_talker);
+   mtk_create_connection(&mss.ss, mtk_use_talker);
+
    
    return 0;
 }
