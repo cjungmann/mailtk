@@ -15,10 +15,10 @@ typedef int (*login_check)(STalker *talker, void *data);
 typedef struct _mtk_login_object
 {
    login_check checker;
-   void        *data;
+   char        data_start;
 } LoggerIn;
 
-int mtk_login(STalker *talker, LoggerIn *li) { return (*li->checker)(talker, li->data); }
+int mtk_login(STalker *talker, LoggerIn *li) { return (*li->checker)(talker, &li->data_start); }
 
 // Generic Connection Section
 
@@ -32,6 +32,7 @@ typedef struct _mtk_socket_spec
    int         host_port;
    int         use_ssl;
    MType       mail_type;
+   SMTPCaps    smtp_caps;
    LoggerIn    *loggerin;
 } SocketSpec;
 
@@ -40,12 +41,22 @@ void mtk_display_socket_spec(const SocketSpec *spec, FILE *str);
 int mtk_create_connection(SocketSpec *ss, mtk_talker_user callback);
 int mtk_send_credentials(STalker *talker, SocketSpec *ss);
 
+int mtk_say_ehlo_get_smtp_caps(STalker *talker, SocketSpec *specs);
+
 int mtk_is_smtp(const SocketSpec *ss) { return ss->mail_type == MT_SMTP; }
 int mtk_is_pop(const SocketSpec *ss)  { return ss->mail_type == MT_POP; }
 
-int mtk_auth_login(STalker *talker, const char *login, const char *password);
-int mtk_auth_plain(STalker *talker, const char *login, const char *password);
+int mtk_auth_login(STalker *talker, const void *data);
+int mtk_auth_plain(STalker *talker, const void *data);
 
+typedef struct _mtk_basic_logger_data
+{
+   login_check checker;
+   const char  *login;
+   const char  *password;
+} BasicLoggerIn;
+
+void mtk_set_basic_loggerin(BasicLoggerIn *bli, const char *login, const char *password);
 
 /***************************
  * Internal prototypes, etc.
@@ -67,8 +78,12 @@ void invoke_callback(STalker *talker, TCParams *tcp)
 // Implementations
 
 
-int mtk_auth_login(STalker *talker, const char *login, const char *password)
+int mtk_auth_login(STalker *talker, const void *data)
 {
+   const char **creds = (const char **)data;
+   const char *login = *creds;
+   const char *password = *(creds+1);
+
    printf("Attempting to authorize with LOGIN protocol, with %s : %s.\n", login, password);
 
    int len_login = strlen(login);
@@ -98,12 +113,18 @@ int mtk_auth_login(STalker *talker, const char *login, const char *password)
          return recv_status == 235;
       }
    }
+   else
+      fprintf(stderr, "AUTH LOGIN failed: \"%s\"\n", recv_buffer);
 
    return 0;
 }
 
-int mtk_auth_plain(STalker *talker, const char *login, const char *password)
+int mtk_auth_plain(STalker *talker, const void *data)
 {
+   const char **creds = (const char **)data;
+   const char *login = *creds;
+   const char *password = *(creds+1);
+
    printf("Attempting to authorize with PLAIN protocol, with %s : %s.\n", login, password);
 
    int len_login = strlen(login);
@@ -130,9 +151,14 @@ int mtk_auth_plain(STalker *talker, const char *login, const char *password)
    stk_recv_line(talker, recv_buffer, sizeof(recv_buffer));
    recv_status = atoi(recv_buffer);
 
-   return recv_status == 235;
+   if (recv_status == 235)
+      return 1;
+   else
+   {
+      fprintf(stderr, "AUTH PLAIN failed: \"%s\"\n", recv_buffer);
+      return 0;
+   }
 }
-
 
 const char *mtk_mail_type_str(MType mt)
 {
@@ -164,6 +190,25 @@ int mtk_send_credentials(STalker *talker, SocketSpec *ss)
       return 1;   // pretend login was successful
 }
 
+int mtk_say_ehlo_get_smtp_caps(STalker *talker, SocketSpec *specs)
+{
+   char buffer[2048];
+   SMTPCaps *scaps = &specs->smtp_caps;
+   int bytes_read;
+
+   memset(scaps, 0, sizeof(SMTPCaps));
+
+   stk_send_line(talker, "EHLO ", specs->host_url, NULL);
+   bytes_read = stk_recv_line(talker, buffer, sizeof(buffer));
+   if (bytes_read > 0)
+   {
+      parse_ehlo_response(scaps, buffer, bytes_read);
+      return 1;
+   }
+   else
+      return 0;
+}
+
 void mtk_internal_pre_return_talker(STalker *talker, void *data)
 {
    TCParams *tcp = (TCParams*)data;
@@ -188,6 +233,12 @@ void mtk_internal_receive_ssl_talker(STalker *talker, void *data)
    TCParams *tcp = (TCParams*)data;
    SocketSpec *ss = (SocketSpec*)tcp->data;
 
+   if (mtk_is_smtp(ss) && !mtk_say_ehlo_get_smtp_caps(talker, ss))
+   {
+      fprintf(stderr, "Unexpected failure with EHLO after previous success.\n");
+      return;
+   }
+
    if (mtk_send_credentials(talker, ss))
       printf("Authorized access.\n");
    else
@@ -199,30 +250,52 @@ void mtk_internal_receive_socket_talker(STalker *talker, void *data)
    TCParams *tcp = (TCParams*)data;
    SocketSpec *ss = (SocketSpec*)tcp->data;
    char buffer[1024];
+   int reply_status;
    int bytes_received;
+   int is_smtp = mtk_is_smtp(ss);
 
    // Read SMTP server greeting
-   if (mtk_is_smtp(ss))
-      bytes_received = stk_recv_line(talker, buffer, sizeof(buffer));
+   if (is_smtp)
+   {
+      stk_recv_line(talker, buffer, sizeof(buffer));
+      mtk_say_ehlo_get_smtp_caps(talker, ss);
+   }
 
    if (ss->use_ssl)
    {
-      if (mtk_is_smtp(ss))
+      if (is_smtp)
       {
-         stk_send_line(talker, "EHLO ", ss->host_url, NULL);
-         bytes_received = stk_recv_line(talker, buffer, sizeof(buffer));
-         if (bytes_received < 3)
-            return;
+         if (!cget_starttls(&ss->smtp_caps))
+         {
+            fprintf(stderr, "Requested TLS security is not available.\n");
+            goto abort_process;
+         }
+         else
+         {
+            stk_send_line(talker, "STARTTLS", NULL);
+            bytes_received = stk_recv_line(talker, buffer, sizeof(buffer));
+            reply_status = atoi(buffer);
+            if (bytes_received > 0 && reply_status < 400)
+            {
+               open_ssl_talker(talker, data, mtk_internal_receive_ssl_talker);
+               goto abort_process;
 
-         stk_send_line(talker, "STARTTLS", NULL);
-         bytes_received = stk_recv_line(talker, buffer, sizeof(buffer));
-         if (bytes_received < 3)
-            return;
+            }
+            else
+            {
+               fprintf(stderr, "STARTTLS failed \"%s\"\n", buffer);
+               goto abort_process;
+            }
+         }
       }
+
       open_ssl_talker(talker, data, mtk_internal_pre_return_talker);
    }
    else
       mtk_internal_pre_return_talker(talker, tcp);
+
+  abort_process:
+   ;
 }
 
 int mtk_create_connection(SocketSpec *ss, mtk_talker_user callback)
@@ -395,11 +468,11 @@ void prepare_socket_spec_from_CL(MySocketSpec *ss, int argc, const char **argv)
 void mtk_use_talker(STalker *talker, void *data)
 {
    MySocketSpec *mss = (MySocketSpec*)data;
-   const char *login = mss->login;
-   const char *password = mss->password;
 
-   /* if (mtk_auth_login(talker, login, password)) */
-   if (mtk_auth_plain(talker, login, password))
+   const char *creds[2] = { mss->login, mss->password };
+
+   if (mtk_auth_login(talker, creds))
+   /* if (mtk_auth_plain(talker, creds)) */
       printf("Ready to send some emails!\n");
    else
       printf("Failed to authorize.\n");
