@@ -216,7 +216,9 @@ void mtk_internal_pre_return_talker(STalker *talker, void *data)
 
    if (ss->loggerin)
    {
-      if (!mtk_login(talker, ss->loggerin))
+      if (mtk_login(talker, ss->loggerin))
+         printf("LoggerIn succeeded in authorizing your access.\n");
+      else
       {
          printf("Ya failed to login, yo.\n");
          return;
@@ -298,6 +300,20 @@ void mtk_internal_receive_socket_talker(STalker *talker, void *data)
    ;
 }
 
+/**
+ * Entry point for making the connection, from this function, execution
+ * progresses through:
+ * mtk_internal_receive_socket_talker()
+ *   mtk_internal_pre_return_talker()
+ *      or
+ *   open_ssl_talker()
+ *      mtk_internal_pre_return_talker()
+ *
+ * mtk_internal_pre_return_talker() is the last function in the
+ * chain that ends with calling *callback()* with a initialized
+ * STalker object that can be used to send email.
+ */
+
 int mtk_create_connection(SocketSpec *ss, mtk_talker_user callback)
 {
    TCParams tcp = { callback, ss };
@@ -310,38 +326,13 @@ int mtk_create_connection(SocketSpec *ss, mtk_talker_user callback)
 
 
 
-/* void mtk_internal_smtp_ssl_user(STalker *talker, void *TalkerCallbackPayload) */
-/* { */
-/* } */
-
-/* void mtk_internal_smtp_socket_user(STalker *talker, void *TalkerCallbackPayload) */
-/* { */
-/*    mtk_TCP *tcp = (mtk_TCP*)TalkerCallbackPayload; */
-   
-/*    ConnectionInfo *ci = tcp->ci; */
-   
-/*    if (greet_smtp_server(ci->host_url, talker, &ci->scaps)) */
-/*    { */
-/*       (*tcp->ultimate_callback)(talker, tcp); */
-/*    } */
-/* } */
-
-
-/* void mtk_prepare_smtp_talker(ConnectionInfo *ci, mtk_talker_user callback) */
-/* { */
-/*    TalkerCallbackPayload tcp = { callback, ci }; */
-/*    open_socket_talker(ci->host_url, ci->host_port, ci, mtk_internal_smtp_socket_user); */
-/* } */
-
-/* int mtk_create_connection(SocketSpec *ss, mtk_talker_user callback) */
-/* { */
-/* } */
-
 
 
 // End-product code, that is code that uses the above code
 // as if it were a library.
 
+
+/** Extend basic SocketSpec structure with custom data. */
 typedef struct _my_socket_spec
 {
    SocketSpec ss;
@@ -369,20 +360,9 @@ void display_my_socket_spec(const MySocketSpec *mss, FILE *filestr)
 
 typedef void (*OptionSetter)(void *option, const char *str);
 
-void int_setter(void *option, const char *str)
-{
-   *(int*)option = atoi(str);
-}
-
-void str_setter(void *option, const char *str)
-{
-   *(const char**)option = str;
-}
-
-void flag_setter(void *option, const char *str)
-{
-   *(int*)option = 1;
-}
+void int_setter(void *option, const char *str)  { *(int*)option = atoi(str); }
+void str_setter(void *option, const char *str)  { *(const char**)option = str; }
+void flag_setter(void *option, const char *str) { *(int*)option = 1; }
 
 void mail_type_setter(void *option, const char *str)
 {
@@ -471,8 +451,8 @@ void mtk_use_talker(STalker *talker, void *data)
 
    const char *creds[2] = { mss->login, mss->password };
 
-   if (mtk_auth_login(talker, creds))
-   /* if (mtk_auth_plain(talker, creds)) */
+   /* if (mtk_auth_login(talker, creds)) */
+   if (mtk_auth_plain(talker, creds))
       printf("Ready to send some emails!\n");
    else
       printf("Failed to authorize.\n");
