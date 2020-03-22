@@ -10,6 +10,8 @@
  ******************************/
 
 // Generic Login Section
+
+// Prototype for login_check function pointer typedef:
 typedef struct _mtk_socket_spec SocketSpec;
 
 typedef int (*login_check)(STalker *talker, SocketSpec *ss);
@@ -44,15 +46,6 @@ int mtk_default_login_check(STalker *talker, SocketSpec *ss);
 
 int mtk_auth_login(STalker *talker, const void *data);
 int mtk_auth_plain(STalker *talker, const void *data);
-
-typedef struct _mtk_basic_logger_data
-{
-   login_check checker;
-   const char  *login;
-   const char  *password;
-} BasicLoggerIn;
-
-void mtk_set_basic_loggerin(BasicLoggerIn *bli, const char *login, const char *password);
 
 /***************************
  * Internal prototypes, etc.
@@ -322,33 +315,22 @@ int mtk_create_connection(SocketSpec *ss, login_check authorizor, mtk_talker_use
 }
 
 
+/***********************************************
+************************************************
+** Beginning of Simulated consumer of library **
+**
+** Sample code using library
+************************************************
+***********************************************/
 
 
-
-// End-product code, that is code that uses the above code
-// as if it were a library.
-
-
-/** Extend basic SocketSpec structure with custom data. */
+// Struct composite of SocketSpec and app-specific data
 typedef struct _my_socket_spec
 {
    SocketSpec ss;
-   const char *login;
-   const char *password;
+   STalker   *talker;
+   RecipLink *rchain;
 } MySocketSpec;
-
-void display_my_socket_spec(const MySocketSpec *mss, FILE *filestr)
-{
-   if (filestr == NULL)
-      filestr = stderr;
-
-   mtk_display_socket_spec(&mss->ss, filestr);
-
-   fprintf(filestr, "login:    [32;1m%s[m.\n", mss->login);
-   fprintf(filestr, "password: [32;1m%s[m.\n", mss->password);
-
-}
-
 
 
 /***********************************
@@ -442,11 +424,57 @@ void prepare_socket_spec_from_CL(SocketSpec *ss, int argc, const char **argv)
    }
 }
 
-void mtk_use_talker(STalker *talker, void *data)
-{
-   /* SocketSpec *ss = (SocketSpec*)data; */
+// End of command-line processing code
 
-   printf("Ready to send some emails!\n");
+
+
+
+const char *reciplist[] = {
+   "chuck@cpjj.net",
+   "chuckj60@gmail.com",
+   "chuckjungmann@gmail.com",
+   "#maryjthefirst@gmail.com",
+   NULL
+};
+
+
+void test_use_recips(RecipLink *chain, void *data)
+{
+   SocketSpec *ss = (SocketSpec*)data;
+
+   // Add to app-specific structure
+   ((MySocketSpec*)ss)->rchain = chain;
+
+   printf("About to show the recipients.\n");
+
+   RecipLink *ptr = chain;
+   while (ptr)
+   {
+      printf("%d: %s.\n", ptr->rtype, ptr->address);
+      ptr = ptr->next;
+   }
+
+   printf("Finished showing recipients.\n");
+}
+
+void test_use_talker(STalker *talker, void *data)
+{
+   SocketSpec *ss = (SocketSpec*)data;
+
+   // Add to app-specific structure
+   ((MySocketSpec*)ss)->talker = talker;
+
+   if (mtk_is_smtp(ss))
+   {
+      // Make a linedrop object out of reciplist
+      ListLineDropper lld;
+      list_init_dropper(&lld, reciplist);
+      
+      LineDrop ld;
+      init_list_line_drop(&ld, &lld);
+
+      build_recip_chain(test_use_recips, &ld, data);
+   }
 }
 
 
@@ -455,14 +483,14 @@ void mtk_use_talker(STalker *talker, void *data)
 
 int main(int argc, const char **argv)
 {
-   SocketSpec ss;
-   memset(&ss, 0, sizeof(ss));
+   MySocketSpec mss;
+   memset(&mss, 0, sizeof(mss));
 
-   prepare_socket_spec_from_CL(&ss, argc, argv);
+   prepare_socket_spec_from_CL((SocketSpec*)&mss, argc, argv);
 
-   mtk_display_socket_spec(&ss, NULL);
+   mtk_display_socket_spec((SocketSpec*)&mss, NULL);
 
-   mtk_create_connection(&ss, mtk_default_login_check, mtk_use_talker);
+   mtk_create_connection((SocketSpec*)&mss, mtk_default_login_check, test_use_talker);
    
    return 0;
 }
