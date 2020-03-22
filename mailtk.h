@@ -3,7 +3,6 @@
 
 #include "linedrop.h"
 #include "logging.h"
-#include "smtp.h"
 #include "smtp_caps.h"
 #include "smtp_iact.h"
 #include "socktalk.h"
